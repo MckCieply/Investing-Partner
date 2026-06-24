@@ -1,0 +1,66 @@
+name: weekly-entry-pipeline
+on:
+  schedule:
+    - cron: '0 18 * * 0'      # niedziela 18:00 UTC (~20:00 PL)
+  workflow_dispatch:
+    inputs:
+      quality:
+        description: 'Preset jakosci: optimal | lean | max'
+        default: 'optimal'
+permissions:
+  contents: write
+jobs:
+  gem:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: set report path
+        run: echo "REPORT_FILE=reports/gem-$(date +%F).md" >> "$GITHUB_ENV"
+
+      - name: ensure reports dir
+        run: mkdir -p reports
+
+      - name: run gem-inwestycyjny pipeline
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            /gem-inwestycyjny ${{ github.event.inputs.quality && format('--quality={0}', github.event.inputs.quality) || '' }}
+
+            Po zakończeniu wszystkich 5 kroków zapisz finalną kompozycję widoku
+            (DIRECTOR_FINAL + appendix z pełnymi raportami agentów, dokładnie jak
+            opisano w sekcji "Finalna kompozycja widoku" SKILL.md) jako plik markdown
+            w ${{ env.REPORT_FILE }}. To jedyny wymagany efekt — nie commituj, nie
+            twórz PR, nie wykonuj żadnych innych zmian w repo.
+          claude_args: |
+            --max-turns 60
+            --max-budget-usd 8.00
+            --allowedTools "Task" "Read" "Write" "WebSearch" "Bash(pip install *)" "Bash(python3 *)" "Bash(python *)"
+
+      - name: commit report
+        run: |
+          git config user.name "gem-bot"
+          git config user.email "gem-bot@users.noreply.github.com"
+          git add "$REPORT_FILE"
+          git commit -m "gem pipeline: $(date +%F)" || echo "no changes"
+          git push
+
+      - name: set email subject date
+        if: always()
+        run: echo "MAIL_DATE=$(date +%d.%m.%Y)" >> "$GITHUB_ENV"
+
+      - name: email report
+        if: always()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.GMAIL_USERNAME }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          from: Gem Inwestycyjny
+          to: ${{ secrets.MAIL_TO }}
+          subject: "Gem Inwestycyjny — kandydaci ${{ env.MAIL_DATE }}"
+          html_body: file://${{ env.REPORT_FILE }}
+          convert_markdown: true
