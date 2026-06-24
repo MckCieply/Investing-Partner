@@ -3,6 +3,8 @@ on:
   schedule:
     - cron: '0 7 * * 0'      # niedziela 07:00 UTC (~09:00 PL latem)
   workflow_dispatch:          # reczne odpalenie z zakladki Actions
+permissions:
+  contents: write
 jobs:
   audit:
     runs-on: ubuntu-latest
