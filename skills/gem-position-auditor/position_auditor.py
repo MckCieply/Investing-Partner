@@ -51,6 +51,48 @@ def _ratchet(new_val, prior_val, price):
         return candidate
     return prior_val
 
+def _r2(x):
+    """Zaokraglenie do 2 miejsc, do wyswietlania (stan wewnetrzny trzyma wiecej precyzji)."""
+    return None if x is None else round(float(x), 2)
+
+def _fmt_date(s):
+    """YYYY-MM-DD -> DD.MM.YYYY do wyswietlania; nierozpoznane (np. 'INIT', 'brak') zostaja bez zmian."""
+    try:
+        return datetime.strptime(s, "%Y-%m-%d").strftime("%d.%m.%Y")
+    except (ValueError, TypeError):
+        return s
+
+# Czytelne etykiety i pelne wyjasnienia metody wyliczenia stopa/transz, per "podstawa" (basis).
+BASIS_INFO = {
+    "CORE":          {"short": "Rdzeń pasywny",
+                       "full": "Pozycja pasywna (core/ETF): stop pod średnią 200-dniową, a w jej braku -20% od ceny. Bez podnoszenia co tydzień."},
+    "TREND_LOW":     {"short": "Trend, niska zmienność",
+                       "full": "Spokojny trend (zmienność ≤5% ceny): stop pod średnią 50-dniową albo 20-dniowym szczytem minus 3× dzienna zmienność (ATR14) — wybierany jest szerszy z tych dwóch poziomów, zawsze między -5% i -20% od ceny."},
+    "TREND_MID":     {"short": "Trend, średnia zmienność",
+                       "full": "Bardziej zmienny trend (zmienność 5–10% ceny, np. spółki typu AMD/MOD/ONTO): jak wyżej, ale z buforem 4× zmienności (ATR14) — szerszy stop, by nie wypaść z pozycji na normalnym szumie cenowym."},
+    "TREND_WIDE":    {"short": "Trend, wysoka zmienność",
+                       "full": "Bardzo zmienny trend (zmienność >10% ceny), pozycja jeszcze pod ceną zakupu: stop liczony jak w przedziale 5–10% — transze włączają się tylko gdy pozycja jest na plusie."},
+    "TREND_TRANCHE": {"short": "Parabola w zysku — transze",
+                       "full": "Bardzo zmienny trend (zmienność >10% ceny) i pozycja na plusie (np. MRVL): zamiast stopa — sprzedaż w 3 transzach: 1/3 przy cenie +2× zmienność (ATR14), 1/3 przy +4× zmienność, 1/3 zostaje jako 'runner'. Stop byłby tu zbyt ciasny i wytrząsnąłby pozycję na normalnym szumie."},
+    "SPIKE":         {"short": "Gwałtowny wzrost (spike)",
+                       "full": "Cena wzrosła ponad 45% w 20 dni: ciasny stop pod średnią 20-dniową, 10-dniowym szczytem minus 1.5× zmienność (ATR7), albo maks. -18% od szczytu — spike'i wracają gwałtownie, więc stop musi być blisko ceny."},
+    "MEANREVERT":    {"short": "Powrót do średniej",
+                       "full": "Cena spadła pod swój trend: stop pod 20-dniowym dołkiem minus 0.5× zmienność (ATR14), bez agresywnego podnoszenia co tydzień."},
+    "SPEC":          {"short": "Pozycja spekulacyjna",
+                       "full": "Pozycja oparta na tezie spekulacyjnej, niezwiązana z trendem: stały stop -12% od ceny, bez podnoszenia."},
+}
+
+def basis_key(bucket, type_, atrp):
+    if bucket == "CORE": return "CORE"
+    if type_ == "TRANCHE": return "TREND_TRANCHE"
+    if bucket == "TREND":
+        if atrp is not None and atrp > 10: return "TREND_WIDE"
+        if atrp is not None and atrp > 5: return "TREND_MID"
+        return "TREND_LOW"
+    if bucket == "SPIKE": return "SPIKE"
+    if bucket == "MEANREVERT": return "MEANREVERT"
+    return "SPEC"
+
 def _atr(df, p):
     h, l, c = df["High"], df["Low"], df["Close"]
     tr = pd.concat([h-l, (h-c.shift()).abs(), (l-c.shift()).abs()], axis=1).max(axis=1)
@@ -162,6 +204,7 @@ def audit(pos, prev):
     prior = prev.get(xtb, {})
 
     out = {"xtb": xtb, "bucket": bucket, "price": price, "atr_pct": p.get("atr_pct"), "type": p["type"]}
+    out["basis"] = basis_key(bucket, p["type"], p.get("atr_pct"))
 
     if p["type"] == "TRANCHE":
         # ratchet TP w gore, z progiem MIN_MOVE (tlumi szum)
@@ -170,9 +213,9 @@ def audit(pos, prev):
         tp2 = _ratchet(p["tp2"], ptp2, price)
         out.update({"tp1": tp1, "tp2": tp2, "note": p["note"]})
         if prior.get("type") != "TRANCHE":
-            out["change"] = f"-> TRANSZE (z {prior.get('type','nowy')}): 1/3@{tp1} 1/3@{tp2} 1/3 runner"
+            out["change"] = f"Przejście na transze: 1/3 @ {_r2(tp1)}, 1/3 @ {_r2(tp2)}, 1/3 zostaje"
         elif (tp1, tp2) != (ptp1, ptp2):
-            out["change"] = f"PODNIES TP: tp1 {ptp1}->{tp1}, tp2 {ptp2}->{tp2}"
+            out["change"] = f"Podnieś TP: {_r2(ptp1)} → {_r2(tp1)}, {_r2(ptp2)} → {_r2(tp2)}"
         else:
             out["change"] = "BEZ ZMIAN (transze)"
         return out
@@ -194,20 +237,20 @@ def audit(pos, prev):
                 "locked": bool(avg is not None and not exit_now and new is not None and new > avg)})
     # opis zmiany tygodniowej
     if prior.get("type") == "TRANCHE":
-        out["change"] = f"-> STOP (z transz): {act} @ {new}"
+        out["change"] = f"Powrót do stopa (z transz): {act} @ {_r2(new)}"
     elif cur is None:
-        out["change"] = f"USTAW @ {new}"
+        out["change"] = f"Ustaw stop na {_r2(new)}"
     elif act == "PODNIES":
-        out["change"] = f"PODNIES {cur} -> {new}  (+{(new/cur-1)*100:.1f}%)"
+        out["change"] = f"Podnieś stop: {_r2(cur)} → {_r2(new)}  (+{(new/cur-1)*100:.1f}%)"
     elif exit_now:
-        out["change"] = f"WYJDZ: stop {new} >= cena {price}"
+        out["change"] = f"WYJDŹ: stop {_r2(new)} ≥ cena {_r2(price)}"
     else:
         out["change"] = "BEZ ZMIAN"
     if prior.get("bucket") and prior["bucket"] != bucket:
-        out["change"] = f"BUCKET {prior['bucket']}->{bucket} | " + out["change"]
+        out["change"] = f"Zmiana kategorii: {prior['bucket']} → {bucket} | " + out["change"]
     return out
 
-def build_html(rows, last_run, n, today):
+def build_html(rows, last_run_display, n, today_display):
     def esc(s): return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     th = "padding:6px 10px;text-align:left;border-bottom:2px solid #ccc;"
     td = "padding:6px 10px;border-bottom:1px solid #eee;"
@@ -216,22 +259,22 @@ def build_html(rows, last_run, n, today):
     errors = [r for r in rows if "error" in r]
 
     html = [f"""<html><body style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1a1a1a;">
-<h2 style="margin-bottom:4px;">Position Auditor &mdash; {esc(today)}</h2>
-<p style="color:#666;margin-top:0;">Poprzedni run: {esc(last_run)} | Pozycji: {n}</p>"""]
+<h2 style="margin-bottom:4px;">Position Auditor &mdash; {esc(today_display)}</h2>
+<p style="color:#666;margin-top:0;">Poprzedni run: {esc(last_run_display)} | Pozycji: {n}</p>"""]
 
     html.append(f'<h3 style="margin-bottom:6px;">Zmiany do przeklikania ({len(changed)})</h3>')
     if changed:
         html.append('<table style="border-collapse:collapse;width:100%;">')
-        html.append(f'<tr><th style="{th}">Ticker</th><th style="{th}">Bucket</th><th style="{th}">Zmiana</th></tr>')
+        html.append(f'<tr><th style="{th}">Ticker</th><th style="{th}">Kategoria</th><th style="{th}">Zmiana</th></tr>')
         for r in changed:
             flag = r.get("exit_now")
             row_style = "background:#fdecea;" if flag else ""
             html.append(f'<tr style="{row_style}"><td style="{td}"><b>{esc(r["xtb"])}</b></td>'
-                        f'<td style="{td}">{esc(r["bucket"])}</td>'
+                        f'<td style="{td}">{esc(BASIS_INFO[r["basis"]]["short"])}</td>'
                         f'<td style="{td}">{esc(r.get("change",""))}</td></tr>')
         html.append("</table>")
     else:
-        html.append('<p style="color:#666;">Brak akcji do podjecia.</p>')
+        html.append('<p style="color:#666;">Brak akcji do podjęcia.</p>')
 
     if errors:
         html.append('<h3 style="margin-bottom:6px;">Błędy danych</h3><ul>')
@@ -245,17 +288,33 @@ def build_html(rows, last_run, n, today):
 
     html.append('<h3 style="margin-bottom:6px;">Pełny stan</h3>')
     html.append('<table style="border-collapse:collapse;width:100%;">')
-    html.append(f'<tr><th style="{th}">Ticker</th><th style="{th}">Typ</th><th style="{th}">Poziomy</th><th style="{th}">Metoda</th></tr>')
+    html.append(f'<tr><th style="{th}">Ticker</th><th style="{th}">Cena</th><th style="{th}">Poziomy</th>'
+                f'<th style="{th}">vs cena</th><th style="{th}">Status</th><th style="{th}">Podstawa</th></tr>')
+    used_basis = []
     for r in rows:
         if "error" in r: continue
+        if r["basis"] not in used_basis: used_basis.append(r["basis"])
         if r["type"] == "TRANCHE":
-            lvl = f"cena {r['price']} | 1/3@{r['tp1']} 1/3@{r['tp2']} 1/3 runner"
+            levels = f"{_r2(r['tp1'])} / {_r2(r['tp2'])}"
+            vs = f"+{(r['tp1']/r['price']-1)*100:.1f}% / +{(r['tp2']/r['price']-1)*100:.1f}%"
+            status = "Transze (Sell Limit)"
         else:
-            flag = " ⚠️WYJŚCIE" if r["exit_now"] else (" 🔒zysk zabezp." if r["locked"] else "")
-            lvl = f"stop {r['stop']} ({r['dist_pct']}%){flag}"
-        html.append(f'<tr><td style="{td}">{esc(r["xtb"])}</td><td style="{td}">{esc(r["type"])}</td>'
-                    f'<td style="{td}">{esc(lvl)}</td><td style="{td}">{esc(r.get("method") or r.get("note",""))}</td></tr>')
-    html.append("</table></body></html>")
+            levels = f"{_r2(r['stop'])}"
+            vs = f"-{r['dist_pct']}%" if r["dist_pct"] is not None else "—"
+            status = "⚠️ WYJŚCIE" if r["exit_now"] else ("🔒 zysk zabezpieczony" if r["locked"] else "—")
+        html.append(f'<tr><td style="{td}"><b>{esc(r["xtb"])}</b></td><td style="{td}">{esc(_r2(r["price"]))}</td>'
+                    f'<td style="{td}">{esc(levels)}</td><td style="{td}">{esc(vs)}</td>'
+                    f'<td style="{td}">{esc(status)}</td><td style="{td}">{esc(BASIS_INFO[r["basis"]]["short"])}</td></tr>')
+    html.append("</table>")
+
+    html.append('<h3 style="margin-bottom:6px;">Jak to wyliczono</h3><ul>')
+    for key in used_basis:
+        html.append(f'<li><b>{esc(BASIS_INFO[key]["short"])}</b> — {esc(BASIS_INFO[key]["full"])}</li>')
+    html.append("</ul>")
+    html.append(f'<p style="color:#999;font-size:12px;">Dane: Yahoo Finance, 1 rok historii dziennej. '
+                f'Stop i poziomy transz nigdy nie schodzą w dół (ratchet). Zmiany mniejsze niż {MIN_MOVE*100:.1f}% '
+                f'ceny są traktowane jako szum i nie są zgłaszane.</p>')
+    html.append("</body></html>")
     return "\n".join(html)
 
 def main():
@@ -271,9 +330,11 @@ def main():
         except Exception: prev = {}
 
     rows = [audit(p, prev) for p in holdings]
-    print("="*74); print("POSITION_AUDITOR v2"); print(f"DATE: {datetime.now().strftime('%Y-%m-%d %a')}")
+    today_display = datetime.now().strftime("%d.%m.%Y")
     last = prev.get("_meta", {}).get("date", "brak")
-    print(f"POPRZEDNI RUN: {last} | POZYCJI: {len(holdings)}")
+    last_display = _fmt_date(last)
+    print("="*74); print("POSITION_AUDITOR v2"); print(f"DATE: {today_display}")
+    print(f"POPRZEDNI RUN: {last_display} | POZYCJI: {len(holdings)}")
     print("-"*74)
     print("# ZMIANY OD OSTATNIEGO RUNU")
     for r in rows:
@@ -303,7 +364,7 @@ def main():
     json.dump(state, open(args.state, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
     print(f"Stan zapisany -> {args.state}")
 
-    html = build_html(rows, last, len(holdings), datetime.now().strftime("%Y-%m-%d %a"))
+    html = build_html(rows, last_display, len(holdings), today_display)
     open(args.html_out, "w", encoding="utf-8").write(html)
     print(f"HTML report zapisany -> {args.html_out}")
 
