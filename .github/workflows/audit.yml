@@ -18,7 +18,7 @@ jobs:
         run: |
           git config user.name "gem-bot"
           git config user.email "gem-bot@users.noreply.github.com"
-          git add stops_state.json audit_report.txt
+          git add stops_state.json audit_report.txt audit_report.html
           git commit -m "weekly audit $(date +%F)" || echo "no changes"
           git push
       - name: set report date
@@ -35,4 +35,4 @@ jobs:
           from: Gem Position Auditor
           to: ${{ secrets.MAIL_TO }}
           subject: "Position Audit ${{ env.REPORT_DATE }}"
-          body: file://audit_report.txt
+          html_body: file://audit_report.html

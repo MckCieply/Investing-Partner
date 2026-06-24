@@ -40,6 +40,16 @@ STATE_FILE = "stops_state.json"
 CAP = 0.20          # max luz stopa od ceny (-20%)
 FLOOR = 0.05        # min dystans stopa od ceny (-5%) dla akcji
 HI_ATR = 0.10       # prog ATR% dla "parabola -> transze"
+MIN_MOVE = 0.003    # min. ruch poziomu wzgledem ceny, by zglosic PODNIES (tlumi szum typu +0.0003)
+
+def _ratchet(new_val, prior_val, price):
+    """Stop/TP rusza sie tylko w gore, i tylko jesli ruch >= MIN_MOVE*price (inaczej szum)."""
+    if new_val is None: return prior_val
+    if prior_val is None: return new_val
+    candidate = max(new_val, prior_val)
+    if candidate - prior_val >= price * MIN_MOVE:
+        return candidate
+    return prior_val
 
 def _atr(df, p):
     h, l, c = df["High"], df["Low"], df["Close"]
@@ -154,10 +164,10 @@ def audit(pos, prev):
     out = {"xtb": xtb, "bucket": bucket, "price": price, "atr_pct": p.get("atr_pct"), "type": p["type"]}
 
     if p["type"] == "TRANCHE":
-        # ratchet TP w gore
+        # ratchet TP w gore, z progiem MIN_MOVE (tlumi szum)
         ptp1 = prior.get("tp1"); ptp2 = prior.get("tp2")
-        tp1 = max(p["tp1"], ptp1) if ptp1 else p["tp1"]
-        tp2 = max(p["tp2"], ptp2) if ptp2 else p["tp2"]
+        tp1 = _ratchet(p["tp1"], ptp1, price)
+        tp2 = _ratchet(p["tp2"], ptp2, price)
         out.update({"tp1": tp1, "tp2": tp2, "note": p["note"]})
         if prior.get("type") != "TRANCHE":
             out["change"] = f"-> TRANSZE (z {prior.get('type','nowy')}): 1/3@{tp1} 1/3@{tp2} 1/3 runner"
@@ -169,13 +179,12 @@ def audit(pos, prev):
 
     stop = p["stop"]
     cur = prior.get("stop")
-    # ratchet stopa w gore
+    # ratchet stopa w gore, z progiem MIN_MOVE (tlumi szum typu +0.0003)
     if cur is None:
         new = stop; act = "USTAW"
-    elif stop is not None and stop > cur:
-        new = stop; act = "PODNIES"
     else:
-        new = cur; act = "BEZ ZMIAN"
+        new = _ratchet(stop, cur, price)
+        act = "PODNIES" if (new is not None and new > cur) else "BEZ ZMIAN"
     exit_now = (new is not None and new >= price)
     if exit_now:
         act = "PRZEGLAD (pod SMA200)" if bucket == "CORE" else "WYJDZ TERAZ"
@@ -198,10 +207,62 @@ def audit(pos, prev):
         out["change"] = f"BUCKET {prior['bucket']}->{bucket} | " + out["change"]
     return out
 
+def build_html(rows, last_run, n, today):
+    def esc(s): return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    th = "padding:6px 10px;text-align:left;border-bottom:2px solid #ccc;"
+    td = "padding:6px 10px;border-bottom:1px solid #eee;"
+    changed = [r for r in rows if "error" not in r and not r.get("change", "").startswith("BEZ ZMIAN")]
+    unchanged = [r for r in rows if "error" not in r and r.get("change", "").startswith("BEZ ZMIAN")]
+    errors = [r for r in rows if "error" in r]
+
+    html = [f"""<html><body style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1a1a1a;">
+<h2 style="margin-bottom:4px;">Position Auditor &mdash; {esc(today)}</h2>
+<p style="color:#666;margin-top:0;">Poprzedni run: {esc(last_run)} | Pozycji: {n}</p>"""]
+
+    html.append(f'<h3 style="margin-bottom:6px;">Zmiany do przeklikania ({len(changed)})</h3>')
+    if changed:
+        html.append('<table style="border-collapse:collapse;width:100%;">')
+        html.append(f'<tr><th style="{th}">Ticker</th><th style="{th}">Bucket</th><th style="{th}">Zmiana</th></tr>')
+        for r in changed:
+            flag = r.get("exit_now")
+            row_style = "background:#fdecea;" if flag else ""
+            html.append(f'<tr style="{row_style}"><td style="{td}"><b>{esc(r["xtb"])}</b></td>'
+                        f'<td style="{td}">{esc(r["bucket"])}</td>'
+                        f'<td style="{td}">{esc(r.get("change",""))}</td></tr>')
+        html.append("</table>")
+    else:
+        html.append('<p style="color:#666;">Brak akcji do podjecia.</p>')
+
+    if errors:
+        html.append('<h3 style="margin-bottom:6px;">Błędy danych</h3><ul>')
+        for r in errors:
+            html.append(f'<li>{esc(r["xtb"])}: {esc(r["error"])}</li>')
+        html.append("</ul>")
+
+    if unchanged:
+        names = ", ".join(esc(r["xtb"]) for r in unchanged)
+        html.append(f'<p style="color:#666;"><b>Bez zmian ({len(unchanged)}):</b> {names}</p>')
+
+    html.append('<h3 style="margin-bottom:6px;">Pełny stan</h3>')
+    html.append('<table style="border-collapse:collapse;width:100%;">')
+    html.append(f'<tr><th style="{th}">Ticker</th><th style="{th}">Typ</th><th style="{th}">Poziomy</th><th style="{th}">Metoda</th></tr>')
+    for r in rows:
+        if "error" in r: continue
+        if r["type"] == "TRANCHE":
+            lvl = f"cena {r['price']} | 1/3@{r['tp1']} 1/3@{r['tp2']} 1/3 runner"
+        else:
+            flag = " ⚠️WYJŚCIE" if r["exit_now"] else (" 🔒zysk zabezp." if r["locked"] else "")
+            lvl = f"stop {r['stop']} ({r['dist_pct']}%){flag}"
+        html.append(f'<tr><td style="{td}">{esc(r["xtb"])}</td><td style="{td}">{esc(r["type"])}</td>'
+                    f'<td style="{td}">{esc(lvl)}</td><td style="{td}">{esc(r.get("method") or r.get("note",""))}</td></tr>')
+    html.append("</table></body></html>")
+    return "\n".join(html)
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("holdings")
     ap.add_argument("--state", default=STATE_FILE)
+    ap.add_argument("--html-out", default="audit_report.html")
     args = ap.parse_args()
     holdings = json.load(open(args.holdings, encoding="utf-8"))
     prev = {}
@@ -241,6 +302,10 @@ def main():
         state[r["xtb"]] = e
     json.dump(state, open(args.state, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
     print(f"Stan zapisany -> {args.state}")
+
+    html = build_html(rows, last, len(holdings), datetime.now().strftime("%Y-%m-%d %a"))
+    open(args.html_out, "w", encoding="utf-8").write(html)
+    print(f"HTML report zapisany -> {args.html_out}")
 
 if __name__ == "__main__":
     main()
