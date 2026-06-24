@@ -21,3 +21,18 @@ jobs:
           git add stops_state.json audit_report.txt
           git commit -m "weekly audit $(date +%F)" || echo "no changes"
           git push
+      - name: set report date
+        if: always()
+        run: echo "REPORT_DATE=$(date +%F)" >> "$GITHUB_ENV"
+      - name: email report
+        if: always()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.GMAIL_USERNAME }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          from: Gem Position Auditor
+          to: ${{ secrets.MAIL_TO }}
+          subject: "Position Audit ${{ env.REPORT_DATE }}"
+          body: file://audit_report.txt
