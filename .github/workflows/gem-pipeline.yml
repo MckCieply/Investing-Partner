@@ -9,6 +9,7 @@ on:
         default: 'optimal'
 permissions:
   contents: write
+  id-token: write
 jobs:
   gem:
     runs-on: ubuntu-latest
@@ -64,4 +65,3 @@ jobs:
           subject: "Gem Inwestycyjny — kandydaci ${{ env.MAIL_DATE }}"
           html_body: file://${{ env.REPORT_FILE }}
           convert_markdown: true
-          content_type: text/html
