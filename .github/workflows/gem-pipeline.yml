@@ -41,9 +41,12 @@ jobs:
             --allowedTools "Task" "Read" "Write" "WebSearch" "Bash(pip install *)" "Bash(python3 *)" "Bash(python *)"
 
       - name: commit report
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           git config user.name "gem-bot"
           git config user.email "gem-bot@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
           git add "$REPORT_FILE"
           git commit -m "gem pipeline: $(date +%F)" || echo "no changes"
           git push
