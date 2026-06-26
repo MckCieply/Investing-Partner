@@ -1,0 +1,72 @@
+name: weekly-recommendation-tracker
+on:
+  schedule:
+    - cron: '0 8 * * 5'      # piatek 08:00 UTC (~10:00 PL)
+  workflow_dispatch:
+permissions:
+  contents: write
+  id-token: write
+jobs:
+  tracker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: set report path
+        run: echo "REPORT_FILE=reports/tracker-$(date +%F).md" >> "$GITHUB_ENV"
+
+      - name: ensure reports dir
+        run: mkdir -p reports
+
+      - name: run Weekly Tracker (Agent 06)
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Wykonaj WYŁĄCZNIE sekcję "Weekly Tracker (osobny przepływ, nie część
+            głównego pipeline'u)" z .claude/skills/gem-inwestycyjny/SKILL.md:
+            przeczytaj .claude/skills/gem-inwestycyjny/agents/06-tracker.md i
+            dispatchuj go jako Task zgodnie z instrukcją (model haiku). NIE
+            odpalaj Scout/Quant/Alpha/Auditor/Director — wyłącznie Tracker.
+
+            Tracker zaktualizuje .claude/skills/gem-inwestycyjny/history/recommendations.csv
+            (status, last_checked_date/price, pct_change_since_entry, pct_to_target,
+            date_resolved). Po zakończeniu zapisz output agenta (krótkie markdown
+            podsumowanie tygodnia) jako plik markdown w ${{ env.REPORT_FILE }}.
+            To jedyny wymagany efekt — nie commituj, nie twórz PR, nie wykonuj
+            żadnych innych zmian w repo poza aktualizacją recommendations.csv
+            i zapisem REPORT_FILE.
+          claude_args: |
+            --max-turns 30
+            --max-budget-usd 2.00
+            --allowedTools "Task" "Read" "Write" "Edit" "Bash(pip install *)" "Bash(python3 *)" "Bash(python *)"
+
+      - name: commit tracker update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "gem-bot"
+          git config user.email "gem-bot@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          git add "$REPORT_FILE" .claude/skills/gem-inwestycyjny/history/recommendations.csv
+          git commit -m "weekly tracker: $(date +%F)" || echo "no changes"
+          git push
+
+      - name: set email subject date
+        if: always()
+        run: echo "MAIL_DATE=$(date +%d.%m.%Y)" >> "$GITHUB_ENV"
+
+      - name: email report
+        if: always()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.GMAIL_USERNAME }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          from: Gem Tracker
+          to: ${{ secrets.MAIL_TO }}
+          subject: "Gem Tracker — status rekomendacji ${{ env.MAIL_DATE }}"
+          html_body: file://${{ env.REPORT_FILE }}
+          convert_markdown: true

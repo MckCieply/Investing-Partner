@@ -24,7 +24,13 @@ Repo zawiera dwa niezależne, zautomatyzowane przez GitHub Actions narzędzia in
 - Auth: `CLAUDE_CODE_OAUTH_TOKEN` (token z planu Pro via `claude setup-token`) — **zużywa tygodniowy limit Claude Pro**, nie osobny budżet API. `--max-budget-usd 8.00` to wewnętrzny cap kosztu tokenów w ramach jednego runu, nie limit subskrypcji.
 - Wymaga zainstalowanej GitHub App "Claude Code" na repo (https://github.com/apps/claude) — bez tego `claude-code-action@v1` failuje przy OIDC.
 - Wynik: `reports/gem-<data>.md` (commitowany do repo) + mail HTML.
-- Agent 06 (Weekly Tracker, w budowie) — osobny przepływ do logowania skuteczności rekomendacji w czasie (`.claude/skills/gem-inwestycyjny/history/`).
+- Krok 6 (mechaniczny, bez subagenta) loguje każdy ticker z `ZIELONE_SWIATLO: TAK` do `history/recommendations.csv` (entry/stop/target, `timing_bucket`, `target_date_est`, `outcome`) — backtest skuteczności całego pipeline'u, nie tylko karty zleceń.
+
+### 3. Gem Tracker (Agent 06, `.github/workflows/gem-tracker.yml`)
+- Osobny, lekki przepływ (Haiku, zero "myślenia") — NIE odpala Scout→Director, tylko aktualizuje status istniejących rekomendacji z `history/recommendations.csv`.
+- Cron: piątek 08:00 UTC + manualny `workflow_dispatch`.
+- Pobiera aktualne ceny (`quant_scanner.py`), flipuje `status` na `HIT_TARGET`/`STOPPED` (ustawia `date_resolved` raz, przy pierwszym rozstrzygnięciu), liczy `pct_to_target`.
+- Wynik: `reports/tracker-<data>.md` + mail, commit zaktualizowanego CSV do repo. Te same fixy (OIDC `id-token: write`, `git remote set-url` przed push) co w `gem-pipeline.yml`.
 
 ## Pułapki, na które już trafiliśmy (nie powtarzać)
 
