@@ -1,0 +1,41 @@
+{
+  "WARNING": "SYNTHETIC SMOKE TEST — NIE WYNIK RYNKOWY",
+  "frozen_params_hash": "2131bb0adbe54645ad0cd5271803952f67faa40d00b89ab962edbd0ab13ed045",
+  "long_verdict": {
+    "verdict": "FAIL",
+    "checks": {
+      "median_edge_t90": [
+        -4.747731932549015,
+        false
+      ],
+      "win_rate": [
+        46.15384615384615,
+        false
+      ],
+      "cohort_share": [
+        0.44,
+        "False"
+      ],
+      "n": [
+        65,
+        true
+      ],
+      "beats_placebo": [
+        -4.85,
+        true
+      ],
+      "robust_2x_cost": [
+        -5.45,
+        false
+      ]
+    }
+  },
+  "long_median_edge_by_horizon_pct": {
+    "30": 0.38,
+    "60": -0.14,
+    "90": -4.75
+  },
+  "short_signal": {
+    "median_edge_t90_pct": -4.49
+  }
+}

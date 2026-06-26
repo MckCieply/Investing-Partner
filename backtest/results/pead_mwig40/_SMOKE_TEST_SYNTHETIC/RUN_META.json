@@ -1,0 +1,50 @@
+{
+  "generated_utc": "2026-06-26T12:52:09.589120+00:00",
+  "git_commit": "5d2364a",
+  "frozen_params_hash": "2131bb0adbe54645ad0cd5271803952f67faa40d00b89ab962edbd0ab13ed045",
+  "frozen_params": {
+    "universe": "mWIG40_point_in_time",
+    "ticker_format": {
+      "broker": "TICK.PL",
+      "data": "TICK.WA"
+    },
+    "surprise_method": "seasonal_random_walk",
+    "sue_lag_quarters": 4,
+    "sue_std_window_quarters": 8,
+    "surprise_fallback_order": [
+      "eps",
+      "net_income",
+      "revenue"
+    ],
+    "n_buckets": 5,
+    "long_bucket": "top",
+    "short_signal_bucket": "bottom",
+    "quality_require_positive_net_income": true,
+    "quality_require_positive_ocf": true,
+    "quality_max_net_debt_ebitda": 3.0,
+    "entry": "next_session_open_after_publication",
+    "horizons_days": [
+      30,
+      60,
+      90
+    ],
+    "primary_horizon": 90,
+    "benchmark": "mWIG40_TR",
+    "benchmark_alt": "WIG",
+    "commission_bps": 0.0,
+    "half_spread_bps": 35.0,
+    "cost_sensitivity_multipliers": [
+      1.0,
+      2.0,
+      3.0
+    ],
+    "pass_median_edge_t90_pct": 4.0,
+    "pass_win_rate_pct": 55.0,
+    "pass_min_cohort_share": 0.6,
+    "pass_min_n": 40,
+    "pass_require_beat_placebo": true,
+    "pass_require_robust_2x_cost": true,
+    "random_seed": 42
+  },
+  "synthetic_smoke_test": true
+}

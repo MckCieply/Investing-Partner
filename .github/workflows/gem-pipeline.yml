@@ -30,15 +30,22 @@ jobs:
           prompt: |
             /gem-inwestycyjny ${{ github.event.inputs.quality && format('--quality={0}', github.event.inputs.quality) || '' }}
 
-            Po zakończeniu wszystkich 5 kroków zapisz finalną kompozycję widoku
-            (DIRECTOR_FINAL + appendix z pełnymi raportami agentów, dokładnie jak
-            opisano w sekcji "Finalna kompozycja widoku" SKILL.md) jako plik markdown
-            w ${{ env.REPORT_FILE }}. To jedyny wymagany efekt — nie commituj, nie
-            twórz PR, nie wykonuj żadnych innych zmian w repo.
+            Wykonaj WSZYSTKIE kroki opisane w SKILL.md, łącznie z Krokiem 1 (zapis
+            historii Scouta do history/scout_<data>.md i history/scout_tickers.csv)
+            i Krokiem 6 (Recommendation Tracking Log — zapis do
+            history/recommendations.csv dla każdego tickera z ZIELONE_SWIATLO: TAK).
+            To są wymagane efekty tego runu, nie pomiń ich.
+
+            Na końcu zapisz finalną kompozycję widoku (DIRECTOR_FINAL + appendix
+            z pełnymi raportami agentów, dokładnie jak opisano w sekcji "Finalna
+            kompozycja widoku" SKILL.md) jako plik markdown w ${{ env.REPORT_FILE }}.
+
+            Nie commituj, nie twórz PR — commit do repo wykonuje osobny krok
+            workflow po tobie.
           claude_args: |
             --max-turns 60
             --max-budget-usd 8.00
-            --allowedTools "Task" "Read" "Write" "WebSearch" "Bash(pip install *)" "Bash(python3 *)" "Bash(python *)"
+            --allowedTools "Task" "Read" "Write" "WebSearch" "Bash(pip install *)" "Bash(python3 *)" "Bash(python *)" "Bash(mkdir -p *)"
 
       - name: commit report
         env:
@@ -48,6 +55,7 @@ jobs:
           git config user.email "gem-bot@users.noreply.github.com"
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
           git add "$REPORT_FILE"
+          [ -d .claude/skills/gem-inwestycyjny/history ] && git add .claude/skills/gem-inwestycyjny/history
           git commit -m "gem pipeline: $(date +%F)" || echo "no changes"
           git push
 
