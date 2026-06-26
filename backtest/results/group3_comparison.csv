@@ -1,0 +1,3 @@
+setup,n_t90,win_rate_t90,median_return_t90,real_edge_vs_spy_t90,placebo_edge_vs_spy_t90,real_minus_placebo,positive_cohorts_t90
+s04_sector_rebound,34,0.6765,0.077,-0.028,-0.0109,-0.0171,3/5
+s03_catalyst_rerating,254,0.6339,0.0848,-0.0008,0.0122,-0.013,5/11

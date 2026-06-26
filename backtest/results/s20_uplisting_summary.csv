@@ -1,0 +1,4 @@
+horizon,n,win_rate,median_return,mean_return,max_drawdown,sl_hit_rate,expectancy,edge_vs_spy_median,setup
+30,83,0.3976,-0.0168,-0.0362,-0.7675,0.7229,-0.0362,-0.044,s20_uplisting
+60,80,0.375,-0.1261,-0.0172,-0.7814,0.7875,-0.0172,-0.1285,s20_uplisting
+90,75,0.4133,-0.128,-0.0745,-0.7868,0.8267,-0.0745,-0.126,s20_uplisting

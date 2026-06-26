@@ -1,0 +1,7 @@
+setup,n,win_rate,edge_vs_spy_median,verdict
+s07_insider_buying,73,0.6301,0.0143,PASS -> Step 2
+s06_index_inclusion,79,0.5316,-0.0153,FAIL (stays out of Scout rewrite)
+s12_merger_arb,16,0.3125,-0.2139,FAIL (stays out of Scout rewrite)
+s05_spinoff,349,0.4756,-0.0409,FAIL (stays out of Scout rewrite)
+s02_consolidation,47,0.5745,-0.0286,FAIL (stays out of Scout rewrite)
+s14_rate_sensitivity,132,0.5909,-0.0086,FAIL (stays out of Scout rewrite)

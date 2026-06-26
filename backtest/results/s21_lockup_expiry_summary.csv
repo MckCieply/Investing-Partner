@@ -1,0 +1,4 @@
+horizon,n,win_rate,median_return,mean_return,max_drawdown,sl_hit_rate,expectancy,edge_vs_spy_median,setup
+30,1150,0.4235,-0.0168,-0.0439,-0.9935,0.6104,-0.0439,-0.0568,s21_lockup_expiry
+60,1111,0.4014,-0.0598,-0.0608,-0.9917,0.6877,-0.0608,-0.0963,s21_lockup_expiry
+90,1056,0.392,-0.1024,-0.071,-0.9931,0.7339,-0.071,-0.1493,s21_lockup_expiry

@@ -1,0 +1,4 @@
+horizon,n,win_rate,median_return,mean_return,max_drawdown,sl_hit_rate,expectancy,edge_vs_spy_median,setup
+30,17,0.4118,-0.0374,-0.0817,-0.7648,0.6471,-0.0817,-0.0535,s12_merger_arb
+60,16,0.3125,-0.1698,-0.1636,-0.8939,0.8125,-0.1636,-0.2139,s12_merger_arb
+90,16,0.4375,-0.2749,-0.2016,-0.9412,0.875,-0.2016,-0.255,s12_merger_arb

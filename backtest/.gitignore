@@ -1,0 +1,5 @@
+# yfinance / SEC / FINRA on-disk caches - large (~450MB, 20k+ files),
+# regenerated on demand from public sources. Never commit.
+.cache/
+__pycache__/
+*.pyc

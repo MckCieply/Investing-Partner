@@ -1,0 +1,4 @@
+horizon,n,win_rate,median_return,mean_return,max_drawdown,sl_hit_rate,expectancy,edge_vs_spy_median,setup
+30,51,0.6275,0.0188,0.0617,-0.1282,0.2353,0.0617,-0.0126,s02_consolidation
+60,47,0.5745,0.0154,0.0588,-0.2798,0.4894,0.0588,-0.0286,s02_consolidation
+90,40,0.525,0.0145,0.003,-0.2884,0.525,0.003,-0.0459,s02_consolidation

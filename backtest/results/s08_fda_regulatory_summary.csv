@@ -1,0 +1,4 @@
+horizon,n,win_rate,median_return,mean_return,max_drawdown,sl_hit_rate,expectancy,edge_vs_spy_median,setup
+30,59,0.5593,0.0127,0.0819,-0.6206,0.339,0.0819,-0.0405,s08_fda_regulatory
+60,58,0.6034,0.0275,0.1492,-0.6332,0.4828,0.1492,-0.026,s08_fda_regulatory
+90,57,0.6491,0.0584,0.1802,-0.3295,0.5614,0.1802,-0.0032,s08_fda_regulatory

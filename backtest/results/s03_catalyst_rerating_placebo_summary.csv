@@ -1,0 +1,5 @@
+horizon,n,win_rate,median_return,mean_return,max_drawdown,sl_hit_rate,expectancy,edge_vs_spy_median,setup
+10,240,0.5292,0.0073,0.0023,-0.2664,0.1667,0.0023,-0.0013,s03_catalyst_rerating_placebo
+30,238,0.4916,-0.002,0.006,-0.5799,0.3487,0.006,-0.0187,s03_catalyst_rerating_placebo
+60,233,0.5322,0.0095,0.0281,-0.5835,0.4979,0.0281,-0.0146,s03_catalyst_rerating_placebo
+90,230,0.5957,0.0538,0.0688,-0.616,0.5565,0.0688,0.0122,s03_catalyst_rerating_placebo

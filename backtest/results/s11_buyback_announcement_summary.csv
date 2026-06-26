@@ -1,0 +1,4 @@
+horizon,n,win_rate,median_return,mean_return,max_drawdown,sl_hit_rate,expectancy,edge_vs_spy_median,setup
+30,762,0.4921,-0.0022,0.0102,-0.3601,0.336,0.0102,-0.0104,s11_buyback_announcement
+60,735,0.5619,0.0202,0.0275,-0.5474,0.4667,0.0275,-0.0185,s11_buyback_announcement
+90,702,0.5299,0.0145,0.0234,-0.6157,0.557,0.0234,-0.0316,s11_buyback_announcement

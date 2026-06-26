@@ -1,0 +1,4 @@
+horizon,n,win_rate,median_return,mean_return,max_drawdown,sl_hit_rate,expectancy,edge_vs_spy_median,setup
+30,993,0.4431,-0.0278,0.0876,-0.9847,0.6747,0.0876,-0.0489,s09_short_squeeze_candidate
+60,973,0.3977,-0.0684,0.0763,-1.0029,0.7945,0.0763,-0.1204,s09_short_squeeze_candidate
+90,940,0.3947,-0.0975,0.0655,-1.0022,0.8394,0.0655,-0.1683,s09_short_squeeze_candidate

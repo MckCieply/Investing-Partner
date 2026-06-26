@@ -1,0 +1,6 @@
+setup,n_t90,win_rate_t90,median_edge_vs_spy_t90,positive_cohorts_t90,n_ok,win_ok,edge_ok,cohort_ok,verdict
+s08_fda_regulatory,57,0.6491,-0.0032,3/5,True,True,False,True,"NOT ELIGIBLE (data-capped: openFDA Drugs@FDA has no rejection/CRL records - approval-only sample, structurally biased upward, not a fair test)"
+s11_buyback_announcement,702,0.5299,-0.0316,0/5,True,False,False,False,FAIL
+s09_short_squeeze_candidate,940,0.3947,-0.1683,0/6,True,False,False,False,FAIL
+s20_uplisting,75,0.4133,-0.126,1/6,True,False,False,False,FAIL
+s21_lockup_expiry,1056,0.392,-0.1493,0/6,True,False,False,False,FAIL

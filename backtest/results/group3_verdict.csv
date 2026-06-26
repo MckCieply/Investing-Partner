@@ -1,0 +1,4 @@
+setup,n_t90,win_rate_t90,real_edge_t90,placebo_edge_t90,positive_cohorts_t90,n_ok,win_ok,edge_ok,cohort_ok,placebo_ok,verdict
+s04_sector_rebound,34.0,0.6765,-0.028,-0.0109,3/5,False,True,False,False,False,FAIL (n=34<50; edge=-0.028<=0.07; cohorts=3/5<80%; placebo not clearly weaker)
+s03_catalyst_rerating,254.0,0.6339,-0.0008,0.0122,5/11,True,True,False,False,False,FAIL (edge=-0.0008<=0.07; cohorts=5/11<80%; placebo not clearly weaker)
+s10_geopolitical_arb,,,,,,,,,,,UNTESTABLE WITHOUT BIAS (no bias-free mechanical test constructible - beneficiary mapping can't be frozen blind to outcomes; effective-date entry is maximally stale (see validation notes))

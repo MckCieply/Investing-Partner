@@ -1,0 +1,4 @@
+horizon,n,win_rate,median_return,mean_return,max_drawdown,sl_hit_rate,expectancy,edge_vs_spy_median,setup
+30,90,0.6111,0.0439,0.0726,-0.4245,0.4778,0.0726,0.0054,s07_insider_buying
+60,73,0.6301,0.0885,0.0748,-0.6948,0.6027,0.0748,0.0143,s07_insider_buying
+90,45,0.6444,0.1019,0.1303,-0.7512,0.6222,0.1303,0.0829,s07_insider_buying

@@ -1,0 +1,4 @@
+horizon,n,win_rate,median_return,mean_return,max_drawdown,sl_hit_rate,expectancy,edge_vs_spy_median,setup
+30,383,0.6449,0.0178,0.0111,-0.3553,0.0783,0.0111,-0.0056,s04_sector_rebound_placebo
+60,377,0.695,0.0345,0.0275,-0.2518,0.1538,0.0275,-0.0057,s04_sector_rebound_placebo
+90,376,0.6995,0.0439,0.0412,-0.2025,0.2021,0.0412,-0.0109,s04_sector_rebound_placebo

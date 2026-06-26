@@ -1,0 +1,5 @@
+horizon,n,win_rate,median_return,mean_return,max_drawdown,sl_hit_rate,expectancy,edge_vs_spy_median,setup
+10,264,0.4962,-0.0006,0.004,-0.4198,0.3258,0.004,-0.0078,s03_catalyst_rerating
+30,260,0.5577,0.0087,0.0372,-0.5939,0.4462,0.0372,-0.0123,s03_catalyst_rerating
+60,258,0.6279,0.0628,0.1335,-0.8405,0.5194,0.1335,0.0065,s03_catalyst_rerating
+90,254,0.6339,0.0848,0.1648,-0.5805,0.5945,0.1648,-0.0008,s03_catalyst_rerating

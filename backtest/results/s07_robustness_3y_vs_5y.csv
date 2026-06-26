@@ -1,0 +1,17 @@
+metryka,3-lata_oryginal_BUGGY,5-lat_poprawiony,zmiana
+data_range_events,2025-06-02 -> 2026-06-17,2021-06-28 -> 2026-06-17,ORIG nie byl realnie 3-letni (bug paginacji OpenInsider - patrz nota)
+n eventow (T+30),90,455,365
+win_rate T+30,61.1%,50.8%,-10.3%
+median_edge_vs_spy T+30,0.5%,-1.1%,-1.6%
+sl_hit_rate T+30,47.8%,51.6%,3.9%
+expectancy T+30,7.3%,4.2%,-3.1%
+n eventow (T+60),73,442,369
+win_rate T+60,63.0%,53.4%,-9.6%
+median_edge_vs_spy T+60,1.4%,-1.2%,-2.6%
+sl_hit_rate T+60,60.3%,63.6%,3.3%
+expectancy T+60,7.5%,8.6%,1.1%
+n eventow (T+90),45,424,379
+win_rate T+90,64.4%,52.8%,-11.6%
+median_edge_vs_spy T+90,8.3%,-5.1%,-13.3%
+sl_hit_rate T+90,62.2%,70.3%,8.1%
+expectancy T+90,13.0%,6.3%,-6.7%

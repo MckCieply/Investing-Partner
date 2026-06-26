@@ -1,0 +1,4 @@
+horizon,n,win_rate,median_return,mean_return,max_drawdown,sl_hit_rate,expectancy,edge_vs_spy_median,setup
+10,132,0.4848,-0.001,0.0017,-0.1214,0.0455,0.0017,-0.0073,s14_rate_sensitivity
+20,132,0.5909,0.0089,0.0086,-0.1492,0.1136,0.0086,-0.0086,s14_rate_sensitivity
+30,132,0.5606,0.0085,0.0079,-0.3201,0.2121,0.0079,-0.0063,s14_rate_sensitivity
