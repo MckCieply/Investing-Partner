@@ -1,11 +1,11 @@
 ---
 name: gem-inwestycyjny
-description: "Pipeline 5 subagentów analizujących tickery — Scout → Quant → Alpha → Auditor → Director. Każdy subagent ma własny model i poziom thinking effort. Używaj gdy użytkownik napisze 'uruchom pipeline', 'skanuj rynek', 'co kupujemy' lub 'odpal gem'."
+description: "Pipeline 5 subagentów analizujących tickery — Scout → Quant → Alpha → Auditor → Director — plus Weekly Tracker (Agent 06) do cotygodniowego audytu skuteczności rekomendacji. Każdy subagent ma własny model i poziom thinking effort. Używaj gdy użytkownik napisze 'uruchom pipeline', 'skanuj rynek', 'co kupujemy', 'odpal gem' lub 'sprawdź status rekomendacji'."
 ---
 
 # Gem Inwestycyjny — Orchestrator
 
-Jesteś orchestratorem 5-subagentowego funduszu. Każdy agent dispatchowany jest przez tool `Task` z dedykowanym modelem i thinking effortem (zaszytymi w pliku agenta).
+Jesteś orchestratorem 5-subagentowego funduszu (plus Agent 06 — Weekly Tracker, osobny przepływ). Każdy agent dispatchowany jest przez tool `Task` z dedykowanym modelem i thinking effortem (zaszytymi w pliku agenta).
 
 **Twoja rola jako orchestratora:** koordynacja sekwencji, przekazywanie outputów, finalna kompozycja widoku dla użytkownika. NIE robisz pracy agentów — oni mają własne protokoły.
 
@@ -24,10 +24,15 @@ ${BASE_DIR}/
   │   ├── 03-alpha.md           ← Alpha (Sonnet, MEDIUM thinking)
   │   ├── 04-auditor.md         ← Auditor (Sonnet, HIGH thinking)
   │   ├── 05-director.md        ← Director (Sonnet, LOW thinking)
+  │   ├── 06-tracker.md         ← Weekly Tracker (Haiku, NONE thinking) — osobny przepływ
   │   └── _models.md            ← scenariusze: Optymalna / Lean / Maximum Quality
-  └── shared/
-      ├── nomenclature.md       ← tabela XTB ↔ Yahoo
-      └── quant_scanner.py      ← skrypt do Agent 02
+  ├── shared/
+  │   ├── nomenclature.md       ← tabela XTB ↔ Yahoo
+  │   └── quant_scanner.py      ← skrypt do Agent 02 i Agent 06
+  └── history/                  ← tworzone przy pierwszym runie
+      ├── scout_<data>.md       ← pełny raport Scouta per run
+      ├── scout_tickers.csv     ← log tickerów proponowanych przez Scouta
+      └── recommendations.csv   ← log do backtestu: wszystkie tickery po Quant TAK + status (OPEN/HIT_TARGET/STOPPED)
 ```
 
 ---
@@ -50,16 +55,26 @@ Pełne tabele w `${BASE_DIR}/agents/_models.md`.
 
 ### Krok 1: Market Scout
 1. Read `${BASE_DIR}/agents/01-scout.md`
-2. Dispatch:
+2. Jeśli `${BASE_DIR}/history/scout_tickers.csv` istnieje — odczytaj ostatnie ~20 wierszy jako anti-context (czego nie powtarzać / co już było proponowane).
+3. Dispatch:
    ```
    Task(
      subagent_type: "general-purpose",
      model: "sonnet",          // lub "opus" dla Maximum Quality
      description: "Market Scout - deep search",
-     prompt: <zawartość 01-scout.md> + "\n\nAktualna data: ${TODAY}"
+     prompt: <zawartość 01-scout.md> + "\n\nAktualna data: ${TODAY}" + "\n\nPoprzednie tickery (anti-context, unikaj powtórzeń bez nowego katalizatora):\n" + <ostatnie wiersze scout_tickers.csv, jeśli istnieją>
    )
    ```
-3. Zachowaj output jako `SCOUT_REPORT`
+4. Zachowaj output jako `SCOUT_REPORT`
+5. **Zapisz wynik run'u na dysku (persystencja historii Scouta):**
+   - Jeśli katalog `${BASE_DIR}/history` nie istnieje — utwórz go.
+   - Zapisz pełny `SCOUT_REPORT` do `${BASE_DIR}/history/scout_${TODAY}.md` (jeden plik per data runu; jeśli plik z dzisiejszą datą już istnieje, nadpisz go — to najnowszy run dnia).
+   - Wyciągnij z `SCOUT_REPORT` każdy ticker (XTB, YAHOO, NAZWA, TYP, NOVELTY, motyw) i dopisz (append, nie nadpisuj) wiersz do `${BASE_DIR}/history/scout_tickers.csv`. Jeśli plik nie istnieje — najpierw utwórz z nagłówkiem:
+     ```
+     date,ticker_xtb,ticker_yahoo,nazwa,motyw,typ,novelty
+     ```
+     Tickery z sekcji `---ODRZUCONE---` NIE są dopisywane do CSV.
+   - To pozwala śledzić w czasie, jakie tickery Scout proponował w kolejnych runach (anti-context dla przyszłych runów i log historyczny dla użytkownika).
 
 ### Krok 2: Quant Core
 1. Read `${BASE_DIR}/agents/02-quant.md`
@@ -113,6 +128,50 @@ Pełne tabele w `${BASE_DIR}/agents/_models.md`.
    ```
 3. Output Directora to `DIRECTOR_FINAL` (markdown, NIE blok kodu)
 
+### Krok 6: Recommendation Tracking Log (mechaniczny, bez subagenta)
+
+Ty (orchestrator) wykonujesz to sam, bez dispatchu — to czysta ekstrakcja danych z 4 raportów które już masz w kontekście.
+
+1. Jeśli `${BASE_DIR}/history` nie istnieje — utwórz.
+2. Jeśli `${BASE_DIR}/history/recommendations.csv` nie istnieje — utwórz z nagłówkiem:
+   ```
+   rec_id,run_date,ticker_xtb,ticker_yahoo,nazwa,motyw,entry_price,stop_loss,target_price,r_r_ratio,timing_bucket,conviction,outcome,outcome_reason,katalizator,status,last_checked_date,last_checked_price,pct_change_since_entry,pct_to_target,notes
+   ```
+3. Z `QUANT_REPORT` wyciągnij KAŻDY ticker z `ZIELONE_SWIATLO: TAK` (nie tylko te kupione przez Directora — to log do backtestu całego pipeline'u, nie tylko karty zleceń).
+4. Dla każdego takiego tickera złóż wiersz:
+   - `entry_price`, `stop_loss` ← `QUANT_REPORT`
+   - `target_price`, `r_r_ratio`, `timing_bucket`, `conviction` ← `ALPHA_MEMO` (sekcje `ANALIZA_ASYMETRII` / `RANKING`)
+   - `outcome` + `outcome_reason` ← zdecyduj wg priorytetu:
+     - Jest w Karcie Zleceń Directora jako `🟢 KUP` z "Pozycja: pełna" → `BOUGHT_FULL`
+     - Jest w Karcie Zleceń jako `🟢 KUP` z "Pozycja: 50%" → `BOUGHT_HALF`
+     - Auditor dał VETO → `AUDITOR_VETO` (reason = powód VETO)
+     - Auditor dał WSTRZYMAJ → `AUDITOR_HOLD` (reason = data/warunek powrotu)
+     - Alpha odrzuciła (sekcja `ODRZUCONE`) → `REJECTED_ALPHA` (reason = powód: Quant NIE / słaba asymetria / korelacja)
+     - Alpha zaklasyfikowała jako LISTA REZERWOWA → `RESERVE_ALPHA` (reason = czemu nie TOP PICK)
+   - `status` = `OPEN` (zawsze przy pierwszym zapisie)
+   - `last_checked_date`/`last_checked_price`/`pct_change_since_entry`/`pct_to_target` = puste (wypełnia Weekly Tracker)
+5. Dopisz (append) te wiersze do `recommendations.csv`. Tickery z `ZIELONE_SWIATLO: NIE` (odpadły już u Quanta) NIE są logowane — nigdy nie miały entry_price/target sensownego do trackingu.
+
+To krok jest niezależny od Weekly Trackera (Agent 06) — Weekly Tracker tylko CZYTA i AKTUALIZUJE ten plik, nie tworzy nowych wierszy.
+
+---
+
+## Weekly Tracker (osobny przepływ, nie część głównego pipeline'u)
+
+Odpalany co tydzień (scheduled, piątek) — NIE wywołuje Scout→Director. Tylko aktualizuje status istniejących rekomendacji.
+
+1. Read `${BASE_DIR}/agents/06-tracker.md`
+2. Dispatch:
+   ```
+   Task(
+     subagent_type: "general-purpose",
+     model: "haiku",
+     description: "Weekly Tracker - aktualizacja statusu rekomendacji",
+     prompt: <zawartość 06-tracker.md>
+   )
+   ```
+3. Output agenta to krótkie podsumowanie tygodnia — pokaż użytkownikowi bez dalszej kompozycji.
+
 ---
 
 ## Finalna kompozycja widoku
@@ -146,7 +205,7 @@ Po wszystkich 5 krokach pokaż użytkownikowi:
 
 Pełna tabela w `${BASE_DIR}/shared/nomenclature.md`. Podsumowanie: każdy ticker zapisujesz w dwóch formatach (XTB dla brokera, Yahoo dla skryptu Quanta).
 
-**Kluczowe: XTB nie obsługuje Japonii (TSE) — wykluczona z mandatu.**
+**Kluczowe: mandat geograficzny to WYŁĄCZNIE USA i Europa — Japonia (TSE), Hong Kong, Chiny i reszta Azji wykluczone z mandatu.**
 
 ---
 

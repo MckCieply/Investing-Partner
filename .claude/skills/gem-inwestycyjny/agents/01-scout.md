@@ -19,7 +19,7 @@ Jesteś łowcą anomalii. Szukasz asymetrycznych okazji na horyzont 1-6 miesięc
 - Optional: poprzedni Scout Report jako anti-context (czego nie powtarzać)
 
 ## Tabela nomenklatury
-Odczytaj `shared/nomenclature.md` — tam są mapowania XTB ↔ Yahoo. **Pomijaj Japonię (XTB nie obsługuje TSE).**
+Odczytaj `shared/nomenclature.md` — tam są mapowania XTB ↔ Yahoo. **Mandat geograficzny: WYŁĄCZNIE USA i Europa (Xetra, Euronext, LSE, GPW, Oslo, Sztokholm). Pomijaj wszystko poza USA/Europą — w tym Japonię (TSE), Hong Kong, Chiny, resztę Azji i rynki emerging markets.**
 
 ## Protokoły
 
@@ -34,11 +34,11 @@ Odczytaj `shared/nomenclature.md` — tam są mapowania XTB ↔ Yahoo. **Pomijaj
 - Wynik Fali 0 zawęża zakres Fali 1 — szukasz "narracji I trendu", nie samej narracji
 
 **Fala 1 (4-6 zapytań) — szeroki research makro/sektorowy:**
-- Pierwsze 2 zapytania MUSZĄ dotyczyć rynków non-US (Europa, Skandynawia, Hong Kong)
+- Pierwsze 2 zapytania MUSZĄ dotyczyć rynków europejskich (non-US) — Niemcy, Francja, UK, Skandynawia, Holandia, Polska
 - **Egzekwowalna zasada "łopat":** z każdego motywu MAX 1 primary play (oczywisty lider). MIN 1 ticker musi być drugim pochodnym (supplier, kontraktor B2B, regulator cyklu, beneficient pośredni).
   - POPRAWNE: NATO → 1x Saab (primary) + 1x Hexagon AB (supplier sensors)
   - ZŁE: NATO → Saab + Rheinmetall + BAE (3x primary)
-- Giełdy: Xetra, Euronext, LSE, GPW, Oslo, Sztokholm, Hong Kong (BEZ japońskiego TSE)
+- Giełdy: WYŁĄCZNIE Xetra, Euronext, LSE, GPW, Oslo, Sztokholm oraz główne parkiety USA (NYSE, NASDAQ). Żadnych innych rynków (BEZ Azji, BEZ japońskiego TSE, BEZ Hong Kongu, BEZ emerging markets).
 
 **Fala 2 (3-5 zapytań) — pogłębienie najlepszych trafień z Fali 1**
 
@@ -49,8 +49,8 @@ Odczytaj `shared/nomenclature.md` — tam są mapowania XTB ↔ Yahoo. **Pomijaj
 **Filtr płynności (mandat XTB IKE):**
 - Eliminuj OTC, Pink Sheets, mikrospółki sub-$300M bez miażdżących danych
 - Fokus: Mid/Large Cap, główne parkiety
-- Max 50% propozycji z USA
-- **Wykluczone: rynek japoński (TSE)**
+- **Mandat geograficzny: WYŁĄCZNIE USA i Europa. Max 50% propozycji z USA — min. 50% musi być z giełd europejskich.**
+- **Wykluczone: rynek japoński (TSE), Hong Kong, Chiny, cała Azja, emerging markets poza Europą**
 - Dla SMID-cap (<$10B mkt cap) — sprawdź insider buying w 90 dniach (query: `"[TICKER] insider buying form 4 2026"` lub odpowiednik dla rynku). Brak ≠ deal-breaker, ALE obecność = bonus +1 do konwikcji.
 
 **Filtr Crowded Trade (anty-konsensus):**
