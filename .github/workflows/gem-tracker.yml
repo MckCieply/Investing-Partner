@@ -49,7 +49,8 @@ jobs:
           git config user.name "gem-bot"
           git config user.email "gem-bot@users.noreply.github.com"
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
-          git add "$REPORT_FILE" .claude/skills/gem-inwestycyjny/history/recommendations.csv
+          git add "$REPORT_FILE"
+          [ -f .claude/skills/gem-inwestycyjny/history/recommendations.csv ] && git add .claude/skills/gem-inwestycyjny/history/recommendations.csv
           git commit -m "weekly tracker: $(date +%F)" || echo "no changes"
           git push
 
