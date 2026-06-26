@@ -80,14 +80,18 @@ To by było naturalne miejsce na ewentualny nowy trigger typu "sprawdź status r
 | `target_price` | upside target | Alpha |
 | `r_r_ratio` | risk:reward | Alpha |
 | `timing_bucket` | TERAZ/WKRÓTCE/ODLEGŁY | Alpha |
+| `target_date_est` | konkretna data, liczona z `run_date` + `timing_bucket` (TERAZ=+4tyg, WKRÓTCE=+3mc, ODLEGŁY=+6mc) | obliczone przy zapisie (Krok 6) |
 | `conviction` | WYSOKA/ŚREDNIA/NISKA | Alpha |
 | `outcome` | BOUGHT_FULL / BOUGHT_HALF / RESERVE_ALPHA / REJECTED_ALPHA / AUDITOR_VETO / AUDITOR_HOLD | wyliczone z Alpha+Auditor+Director |
 | `outcome_reason` | 1 zdanie — czemu spadł (lub czemu kupiony) | odpowiedni agent |
 | `katalizator` | event + szacowana data | Scout |
 | `status` | OPEN / HIT_TARGET / STOPPED | weekly review |
+| `date_resolved` | data, w której `status` PIERWSZY RAZ przeszedł z OPEN na HIT_TARGET/STOPPED — zapisywana raz, nigdy nadpisywana | weekly review (Agent 06) |
 | `last_checked_date` / `last_checked_price` | ostatni pull ceny | weekly review (quant_scanner.py) |
 | `pct_change_since_entry` / `pct_to_target` | przeliczane | weekly review |
 | `notes` | wolny tekst | opcjonalne |
+
+`target_date_est` vs `date_resolved` to miara trafności szacowania horyzontu czasowego przez Alphę (np. "WKRÓTCE" miało oznaczać 3 miesiące, faktycznie zajęło 5) — niezależna od tego, czy kierunek (target/stop) był trafny.
 
 ## Co implementuję
 

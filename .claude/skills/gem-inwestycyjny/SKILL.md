@@ -135,12 +135,13 @@ Ty (orchestrator) wykonujesz to sam, bez dispatchu — to czysta ekstrakcja dany
 1. Jeśli `${BASE_DIR}/history` nie istnieje — utwórz.
 2. Jeśli `${BASE_DIR}/history/recommendations.csv` nie istnieje — utwórz z nagłówkiem:
    ```
-   rec_id,run_date,ticker_xtb,ticker_yahoo,nazwa,motyw,entry_price,stop_loss,target_price,r_r_ratio,timing_bucket,conviction,outcome,outcome_reason,katalizator,status,last_checked_date,last_checked_price,pct_change_since_entry,pct_to_target,notes
+   rec_id,run_date,ticker_xtb,ticker_yahoo,nazwa,motyw,entry_price,stop_loss,target_price,r_r_ratio,timing_bucket,target_date_est,conviction,outcome,outcome_reason,katalizator,status,date_resolved,last_checked_date,last_checked_price,pct_change_since_entry,pct_to_target,notes
    ```
 3. Z `QUANT_REPORT` wyciągnij KAŻDY ticker z `ZIELONE_SWIATLO: TAK` (nie tylko te kupione przez Directora — to log do backtestu całego pipeline'u, nie tylko karty zleceń).
 4. Dla każdego takiego tickera złóż wiersz:
    - `entry_price`, `stop_loss` ← `QUANT_REPORT`
    - `target_price`, `r_r_ratio`, `timing_bucket`, `conviction` ← `ALPHA_MEMO` (sekcje `ANALIZA_ASYMETRII` / `RANKING`)
+   - `target_date_est` ← oblicz z `run_date` + `timing_bucket`: `TERAZ` = +4 tygodnie, `WKRÓTCE` = +3 miesiące, `ODLEGŁY` = +6 miesięcy. Brak `timing_bucket` → puste.
    - `outcome` + `outcome_reason` ← zdecyduj wg priorytetu:
      - Jest w Karcie Zleceń Directora jako `🟢 KUP` z "Pozycja: pełna" → `BOUGHT_FULL`
      - Jest w Karcie Zleceń jako `🟢 KUP` z "Pozycja: 50%" → `BOUGHT_HALF`
@@ -149,7 +150,7 @@ Ty (orchestrator) wykonujesz to sam, bez dispatchu — to czysta ekstrakcja dany
      - Alpha odrzuciła (sekcja `ODRZUCONE`) → `REJECTED_ALPHA` (reason = powód: Quant NIE / słaba asymetria / korelacja)
      - Alpha zaklasyfikowała jako LISTA REZERWOWA → `RESERVE_ALPHA` (reason = czemu nie TOP PICK)
    - `status` = `OPEN` (zawsze przy pierwszym zapisie)
-   - `last_checked_date`/`last_checked_price`/`pct_change_since_entry`/`pct_to_target` = puste (wypełnia Weekly Tracker)
+   - `date_resolved`/`last_checked_date`/`last_checked_price`/`pct_change_since_entry`/`pct_to_target` = puste (wypełnia Weekly Tracker)
 5. Dopisz (append) te wiersze do `recommendations.csv`. Tickery z `ZIELONE_SWIATLO: NIE` (odpadły już u Quanta) NIE są logowane — nigdy nie miały entry_price/target sensownego do trackingu.
 
 To krok jest niezależny od Weekly Trackera (Agent 06) — Weekly Tracker tylko CZYTA i AKTUALIZUJE ten plik, nie tworzy nowych wierszy.

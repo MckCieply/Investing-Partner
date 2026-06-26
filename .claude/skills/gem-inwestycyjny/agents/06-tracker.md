@@ -37,6 +37,8 @@ python3 ${BASE_DIR}/shared/quant_scanner.py TICKER1 TICKER2 ...
   - `last_checked_price <= stop_loss` (jeśli stop_loss istnieje) → `status = STOPPED`
   - Inaczej → `status` zostaje `OPEN`
   - Jeśli oba warunki technicznie prawdziwe naraz (rzadkie, duży gap) → priorytet ma `STOPPED` (konserwatywnie)
+- **Jeśli `status` zmienia się z `OPEN` na `HIT_TARGET`/`STOPPED` w tym przebiegu** → ustaw `date_resolved` = dzisiejsza data. To pole zapisuje się TYLKO raz, w momencie pierwszego rozstrzygnięcia — nie nadpisuj go w kolejnych tygodniach (rekord i tak wypadnie z filtra `status == OPEN` w Kroku 2, więc nigdy nie zostanie ponownie sprawdzony, ale dla jasności: nie dotykaj `date_resolved` jeśli już jest wypełnione).
+- To pozwala porównać `target_date_est` (ile pipeline szacował, że zajmie) z `date_resolved` (ile faktycznie zajęło) — miara trafności szacowania horyzontu czasowego przez Alphę, niezależna od trafności samego kierunku.
 
 **Krok 6:** Zapisz zaktualizowany `recommendations.csv` (nadpisz cały plik z poprawionymi wierszami — to jedyny krok w całym pipeline gdzie nadpisujemy, nie appendujemy, bo aktualizujemy istniejące rekordy, nie dodajemy nowych).
 
