@@ -46,7 +46,8 @@ jobs:
             --max-turns 60
             --max-budget-usd 12.00
             --permission-mode bypassPermissions
-            --allowedTools "Task" "Read" "Write" "Edit" "Glob" "Grep" "WebSearch" "WebFetch" "NotebookRead" "TodoWrite" "Bash(pip install *)" "Bash(python3 *)" "Bash(python *)" "Bash(mkdir -p *)" "Bash(ls *)" "Bash(find *)" "Bash(cat *)" "Bash(echo *)" "Bash(git status*)" "Bash(git log*)" "Bash(git diff*)" "Bash(curl *)"
+            --allowedTools "Task" "Agent" "ToolSearch" "Read" "Write" "Edit" "Glob" "Grep" "WebSearch" "WebFetch" "NotebookRead" "TodoWrite" "Bash(pip install *)" "Bash(python3 *)" "Bash(python *)" "Bash(mkdir -p *)" "Bash(ls *)" "Bash(find *)" "Bash(cat *)" "Bash(echo *)" "Bash(git status*)" "Bash(git log*)" "Bash(git diff*)" "Bash(curl *)"
+            --disallowedTools "ScheduleWakeup" "SendMessage" "TaskCreate" "TaskUpdate" "TaskGet" "TaskList" "TaskOutput" "TaskStop" "Monitor" "PushNotification"
 
       - name: capture run log
         if: always()
@@ -141,6 +142,20 @@ jobs:
             tail -n 30 "$SUMMARY_FILE" > "$SUMMARY_FILE.tmp" && mv "$SUMMARY_FILE.tmp" "$SUMMARY_FILE"
           fi
 
+      - name: verify report produced
+        if: always()
+        run: |
+          # Guard against the "green but empty" failure mode: the action can
+          # self-report success while having stalled mid-pipeline (no report).
+          # Decide REPORT_OK here; the email + final-status steps branch on it.
+          if [ -s "$REPORT_FILE" ] && grep -qiE "Karta Zlece|DIRECTOR|Gem Inwestycyjny" "$REPORT_FILE"; then
+            echo "REPORT_OK=true" >> "$GITHUB_ENV"
+            echo "Report present and non-trivial: $REPORT_FILE"
+          else
+            echo "REPORT_OK=false" >> "$GITHUB_ENV"
+            echo "::error::Pipeline reported success but $REPORT_FILE is missing/empty — partial run (no Director report)."
+          fi
+
       - name: commit report
         if: always()
         env:
@@ -159,7 +174,7 @@ jobs:
         run: echo "MAIL_DATE=$(date +%d.%m.%Y)" >> "$GITHUB_ENV"
 
       - name: email report
-        if: always()
+        if: always() && env.REPORT_OK == 'true'
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
@@ -171,3 +186,29 @@ jobs:
           subject: "Gem Inwestycyjny — kandydaci ${{ env.MAIL_DATE }}"
           html_body: file://${{ env.REPORT_FILE }}
           convert_markdown: true
+
+      - name: email failure notice
+        if: always() && env.REPORT_OK != 'true'
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.GMAIL_USERNAME }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          from: Gem Inwestycyjny
+          to: ${{ secrets.MAIL_TO }}
+          subject: "⚠️ Gem Inwestycyjny — run NIEUDANY ${{ env.MAIL_DATE }}"
+          body: |
+            Pipeline zakończył się bez raportu (brak/pusty ${{ env.REPORT_FILE }}).
+            Najczęstsze przyczyny: budżet/timeout/limit Pro, albo orchestrator
+            zatrzymał się w połowie. Sprawdź logi i runbook:
+
+            https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      - name: fail job if report missing
+        if: always()
+        run: |
+          if [ "${REPORT_OK:-false}" != "true" ]; then
+            echo "::error::Marking job as failed — no Director report produced."
+            exit 1
+          fi

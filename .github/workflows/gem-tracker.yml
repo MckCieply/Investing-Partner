@@ -41,7 +41,8 @@ jobs:
             --max-turns 30
             --max-budget-usd 2.00
             --permission-mode bypassPermissions
-            --allowedTools "Task" "Read" "Write" "Edit" "Glob" "Grep" "WebFetch" "NotebookRead" "TodoWrite" "Bash(pip install *)" "Bash(python3 *)" "Bash(python *)" "Bash(ls *)" "Bash(find *)" "Bash(cat *)" "Bash(echo *)" "Bash(git status*)" "Bash(git log*)" "Bash(git diff*)"
+            --allowedTools "Task" "Agent" "ToolSearch" "Read" "Write" "Edit" "Glob" "Grep" "WebFetch" "NotebookRead" "TodoWrite" "Bash(pip install *)" "Bash(python3 *)" "Bash(python *)" "Bash(ls *)" "Bash(find *)" "Bash(cat *)" "Bash(echo *)" "Bash(git status*)" "Bash(git log*)" "Bash(git diff*)"
+            --disallowedTools "ScheduleWakeup" "SendMessage" "TaskCreate" "TaskUpdate" "TaskGet" "TaskList" "TaskOutput" "TaskStop" "Monitor" "PushNotification"
 
       - name: capture run log
         if: always()
@@ -102,6 +103,19 @@ jobs:
             tail -n 10 "$SUMMARY_FILE" > "$SUMMARY_FILE.tmp" && mv "$SUMMARY_FILE.tmp" "$SUMMARY_FILE"
           fi
 
+      - name: verify report produced
+        if: always()
+        run: |
+          # Same green-but-empty guard as gem-pipeline: a stalled Tracker can
+          # self-report success without writing its weekly summary.
+          if [ -s "$REPORT_FILE" ] && [ "$(wc -c < "$REPORT_FILE")" -gt 40 ]; then
+            echo "REPORT_OK=true" >> "$GITHUB_ENV"
+            echo "Tracker report present: $REPORT_FILE"
+          else
+            echo "REPORT_OK=false" >> "$GITHUB_ENV"
+            echo "::error::Tracker reported success but $REPORT_FILE is missing/empty."
+          fi
+
       - name: commit tracker update
         if: always()
         env:
@@ -121,7 +135,7 @@ jobs:
         run: echo "MAIL_DATE=$(date +%d.%m.%Y)" >> "$GITHUB_ENV"
 
       - name: email report
-        if: always()
+        if: always() && env.REPORT_OK == 'true'
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
@@ -133,3 +147,28 @@ jobs:
           subject: "Gem Tracker — status rekomendacji ${{ env.MAIL_DATE }}"
           html_body: file://${{ env.REPORT_FILE }}
           convert_markdown: true
+
+      - name: email failure notice
+        if: always() && env.REPORT_OK != 'true'
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.GMAIL_USERNAME }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          from: Gem Tracker
+          to: ${{ secrets.MAIL_TO }}
+          subject: "⚠️ Gem Tracker — run NIEUDANY ${{ env.MAIL_DATE }}"
+          body: |
+            Weekly Tracker zakończył się bez raportu (brak/pusty ${{ env.REPORT_FILE }}).
+            Sprawdź logi:
+
+            https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      - name: fail job if report missing
+        if: always()
+        run: |
+          if [ "${REPORT_OK:-false}" != "true" ]; then
+            echo "::error::Marking job as failed — no Tracker report produced."
+            exit 1
+          fi

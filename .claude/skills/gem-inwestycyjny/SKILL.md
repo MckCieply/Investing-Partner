@@ -11,6 +11,21 @@ Jesteś orchestratorem 5-subagentowego funduszu (plus Agent 06 — Weekly Tracke
 
 ---
 
+## ⛔ KONTRAKT SYNCHRONICZNOŚCI (czytaj zanim cokolwiek dispatchujesz)
+
+Dispatch subagenta jest **synchroniczny i blokujący**. Narzędzie dispatchujące (`Task`/`Agent`) zwraca PEŁNY finalny output subagenta **w tym samym wywołaniu** — raport agenta to następna rzecz, jaką zobaczysz w swoim kontekście. Natychmiast przechodzisz do kolejnego kroku.
+
+Twarde zasady — łamanie którejkolwiek to BUG, nie poprawne zachowanie:
+
+- **NIGDY nie uruchamiaj subagenta w tle** (`run_in_background`). Zawsze tryb blokujący.
+- **NIGDY nie "czekaj" na agenta** — nie wywołuj `ScheduleWakeup`, `Monitor`, `SendMessage`, żadnego sleepa ani `echo waiting`. Jeśli czujesz potrzebę "poczekania na agenta" — to oznacza, że jego wynik JUŻ masz w kontekście. Przeczytaj go i jedź dalej.
+- **NIGDY nie kończ swojej tury** (`end_turn`) przed zapisaniem finalnego raportu do `reports/gem-<data>.md`. Tura kończy się dopiero PO Kroku 6 i zapisie pliku raportu.
+- Jeśli subagent zadaje pytanie / prosi o potwierdzenie zamiast wykonać zadanie — **nie negocjuj przez SendMessage**. Re-dispatchuj go raz, dopisując do promptu: "Masz wszystkie dane. Wykonaj natychmiast, bez pytań." Jeśli drugi raz odmówi — przerwij pipeline i zaraportuj.
+
+Pipeline jest jedną nieprzerwaną sekwencją w jednej turze: Scout → Quant → Alpha → Auditor → Director → Krok 6 → zapis raportu. Brak punktów, w których oddajesz kontrolę i czekasz.
+
+---
+
 ## Lokalizacja plików (BASE_DIR)
 
 Wszystkie pliki agentów są w katalogu skilla. Odczytaj ścieżkę z systemowego "Base directory for this skill" (przekazane przy załadowaniu skilla). Standardowo:
