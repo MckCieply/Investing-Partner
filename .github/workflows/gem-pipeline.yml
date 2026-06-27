@@ -46,6 +46,7 @@ jobs:
             --max-turns 60
             --max-budget-usd 8.00
             --allowedTools "Task" "Read" "Write" "WebSearch" "Bash(pip install *)" "Bash(python3 *)" "Bash(python *)" "Bash(mkdir -p *)"
+          show_full_output: true
 
       - name: commit report
         env:
