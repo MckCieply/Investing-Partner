@@ -42,16 +42,77 @@ jobs:
             --max-budget-usd 2.00
             --allowedTools "Task" "Read" "Write" "Edit" "Bash(pip install *)" "Bash(python3 *)" "Bash(python *)"
 
+      - name: capture run log
+        if: always()
+        run: |
+          RUNBOOK_DIR=.claude/skills/gem-inwestycyjny/history/tracker-runbook
+          FULL_DIR="$RUNBOOK_DIR/full"
+          SUMMARY_FILE="$RUNBOOK_DIR/summary.jsonl"
+          mkdir -p "$FULL_DIR"
+
+          SRC=/home/runner/work/_temp/claude-execution-output.json
+          if [ ! -f "$SRC" ]; then
+            SRC=$(find /home/runner/work/_temp -maxdepth 1 -name '*execution-output*.json' 2>/dev/null | head -n1)
+          fi
+
+          DATE=$(date +%F)
+          RUN_FILE="$FULL_DIR/run-${{ github.run_id }}-$DATE.json"
+
+          if [ -n "$SRC" ] && [ -f "$SRC" ]; then
+            cp "$SRC" "$RUN_FILE"
+          else
+            echo '{"error":"execution log not found at expected path"}' > "$RUN_FILE"
+          fi
+
+          python3 - "$RUN_FILE" "$DATE" "${{ github.run_id }}" >> "$SUMMARY_FILE" <<'PYEOF'
+          import json, sys
+          path, date, run_id = sys.argv[1], sys.argv[2], sys.argv[3]
+          try:
+              with open(path) as f:
+                  data = json.load(f)
+          except Exception as e:
+              print(json.dumps({"run_id": run_id, "date": date, "error": f"failed to parse log: {e}"}))
+              sys.exit(0)
+          if isinstance(data, list):
+              result = next((e for e in reversed(data) if isinstance(e, dict) and e.get("type") == "result"), {})
+          elif isinstance(data, dict) and data.get("type") == "result":
+              result = data
+          else:
+              result = data if isinstance(data, dict) else {}
+          denials = result.get("permission_denials") or []
+          summary = {
+              "run_id": run_id,
+              "date": date,
+              "subtype": result.get("subtype"),
+              "is_error": result.get("is_error"),
+              "num_turns": result.get("num_turns"),
+              "total_cost_usd": result.get("total_cost_usd"),
+              "permission_denials_count": result.get("permission_denials_count", len(denials)),
+              "error": result.get("result") if result.get("is_error") else None,
+          }
+          print(json.dumps(summary))
+          PYEOF
+
+          # lighter caps than the main pipeline: keep newest 3 full logs
+          (cd "$FULL_DIR" && ls -1t run-*.json 2>/dev/null | tail -n +4 | xargs -r rm --)
+
+          # keep newest 10 summary records
+          if [ -f "$SUMMARY_FILE" ]; then
+            tail -n 10 "$SUMMARY_FILE" > "$SUMMARY_FILE.tmp" && mv "$SUMMARY_FILE.tmp" "$SUMMARY_FILE"
+          fi
+
       - name: commit tracker update
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           git config user.name "gem-bot"
           git config user.email "gem-bot@users.noreply.github.com"
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
-          git add "$REPORT_FILE"
+          [ -f "$REPORT_FILE" ] && git add "$REPORT_FILE"
           [ -f .claude/skills/gem-inwestycyjny/history/recommendations.csv ] && git add .claude/skills/gem-inwestycyjny/history/recommendations.csv
-          git commit -m "weekly tracker: $(date +%F)" || echo "no changes"
+          [ -d .claude/skills/gem-inwestycyjny/history/tracker-runbook ] && git add .claude/skills/gem-inwestycyjny/history/tracker-runbook
+          git commit -m "weekly tracker: $(date +%F) (run ${{ github.run_id }})" || echo "no changes"
           git push
 
       - name: set email subject date

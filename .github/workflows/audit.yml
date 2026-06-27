@@ -13,13 +13,34 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: pip install -r requirements.txt
-      - run: python skills/gem-position-auditor/position_auditor.py holdings.json | tee audit_report.txt
+      - name: run position auditor
+        run: python skills/gem-position-auditor/position_auditor.py holdings.json | tee audit_report.txt
+
+      - name: capture run log
+        if: always()
+        run: |
+          RUNBOOK_DIR=skills/gem-position-auditor/history/runbook
+          mkdir -p "$RUNBOOK_DIR"
+          DATE=$(date +%F)
+          RUN_FILE="$RUNBOOK_DIR/run-${{ github.run_id }}-$DATE.txt"
+          if [ -f audit_report.txt ]; then
+            cp audit_report.txt "$RUN_FILE"
+          else
+            echo "audit_report.txt not found — position_auditor.py likely failed before producing output" > "$RUN_FILE"
+          fi
+          # lighter cap: keep only the newest 5 runs
+          (cd "$RUNBOOK_DIR" && ls -1t run-*.txt 2>/dev/null | tail -n +6 | xargs -r rm --)
+
       - name: commit state
+        if: always()
         run: |
           git config user.name "gem-bot"
           git config user.email "gem-bot@users.noreply.github.com"
-          git add stops_state.json audit_report.txt audit_report.html
-          git commit -m "weekly audit $(date +%F)" || echo "no changes"
+          [ -f stops_state.json ] && git add stops_state.json
+          [ -f audit_report.txt ] && git add audit_report.txt
+          [ -f audit_report.html ] && git add audit_report.html
+          [ -d skills/gem-position-auditor/history/runbook ] && git add skills/gem-position-auditor/history/runbook
+          git commit -m "weekly audit $(date +%F) (run ${{ github.run_id }})" || echo "no changes"
           git push
       - name: set report date
         if: always()
