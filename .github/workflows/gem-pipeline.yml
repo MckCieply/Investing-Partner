@@ -46,7 +46,6 @@ jobs:
             --max-turns 60
             --max-budget-usd 12.00
             --allowedTools "Task" "Read" "Write" "WebSearch" "Bash(pip install *)" "Bash(python3 *)" "Bash(python *)" "Bash(mkdir -p *)"
-          show_full_output: true
 
       - name: capture run log
         if: always()
