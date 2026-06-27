@@ -45,7 +45,8 @@ jobs:
           claude_args: |
             --max-turns 60
             --max-budget-usd 12.00
-            --allowedTools "Task" "Read" "Write" "WebSearch" "Bash(pip install *)" "Bash(python3 *)" "Bash(python *)" "Bash(mkdir -p *)"
+            --permission-mode bypassPermissions
+            --allowedTools "Task" "Read" "Write" "Edit" "Glob" "Grep" "WebSearch" "WebFetch" "NotebookRead" "TodoWrite" "Bash(pip install *)" "Bash(python3 *)" "Bash(python *)" "Bash(mkdir -p *)" "Bash(ls *)" "Bash(find *)" "Bash(cat *)" "Bash(echo *)" "Bash(git status*)" "Bash(git log*)" "Bash(git diff*)" "Bash(curl *)"
 
       - name: capture run log
         if: always()
