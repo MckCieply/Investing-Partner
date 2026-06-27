@@ -78,13 +78,40 @@ jobs:
           except Exception as e:
               print(json.dumps({"run_id": run_id, "date": date, "error": f"failed to parse log: {e}"}))
               sys.exit(0)
-          if isinstance(data, list):
-              result = next((e for e in reversed(data) if isinstance(e, dict) and e.get("type") == "result"), {})
-          elif isinstance(data, dict) and data.get("type") == "result":
-              result = data
-          else:
-              result = data if isinstance(data, dict) else {}
+          events = data if isinstance(data, list) else [data]
+          result = next((e for e in reversed(events) if isinstance(e, dict) and e.get("type") == "result"), {})
           denials = result.get("permission_denials") or []
+
+          # reconstruct per-stage timing from Task tool dispatch/completion events.
+          # each Scout/Quant/Alpha/Auditor/Director call (and Scout's own search-wave
+          # sub-tasks) shows up here as one entry, in chronological order.
+          descriptions = {}
+          completions = []
+          seen_task_ids = set()
+          for e in events:
+              if not isinstance(e, dict) or e.get("type") != "system":
+                  continue
+              if e.get("subtype") == "task_started" and e.get("task_id"):
+                  descriptions.setdefault(e["task_id"], e.get("description", e["task_id"]))
+              elif e.get("subtype") == "task_updated":
+                  patch = e.get("patch") or {}
+                  tid = e.get("task_id")
+                  if patch.get("status") == "completed" and patch.get("end_time") and tid not in seen_task_ids:
+                      seen_task_ids.add(tid)
+                      completions.append((tid, patch["end_time"]))
+          completions.sort(key=lambda x: x[1])
+
+          duration_ms = result.get("duration_ms")
+          approx_start_ms = (completions[-1][1] - duration_ms) if (completions and duration_ms) else None
+
+          timeline = []
+          prev_end = approx_start_ms
+          for tid, end_ms in completions:
+              desc = descriptions.get(tid, tid)[:80]
+              elapsed_sec = round((end_ms - prev_end) / 1000, 1) if prev_end is not None else None
+              timeline.append({"stage": desc, "elapsed_sec": elapsed_sec})
+              prev_end = end_ms
+
           summary = {
               "run_id": run_id,
               "date": date,
@@ -94,8 +121,15 @@ jobs:
               "total_cost_usd": result.get("total_cost_usd"),
               "permission_denials_count": result.get("permission_denials_count", len(denials)),
               "error": result.get("result") if result.get("is_error") else None,
+              "stage_timeline": timeline,
           }
           print(json.dumps(summary))
+
+          sys.stderr.write("\n--- stage timing (run %s) ---\n" % run_id)
+          for t in timeline:
+              secs = "%6.1fs" % t["elapsed_sec"] if t["elapsed_sec"] is not None else "    ?s"
+              sys.stderr.write("%s  %s\n" % (secs, t["stage"]))
+          sys.stderr.write("-----------------------------\n")
           PYEOF
 
           # keep only the newest 10 full logs; older runs survive only as a summary.jsonl line
