@@ -148,9 +148,23 @@ jobs:
           # Guard against the "green but empty" failure mode: the action can
           # self-report success while having stalled mid-pipeline (no report).
           # Decide REPORT_OK here; the email + final-status steps branch on it.
-          if [ -s "$REPORT_FILE" ] && grep -qiE "Karta Zlece|DIRECTOR|Gem Inwestycyjny" "$REPORT_FILE"; then
+          #
+          # A second, sneakier failure mode: the orchestrator sees that
+          # reports/gem-<today>.md already exists from an earlier run today
+          # (e.g. a manual re-run with a different --quality after the
+          # scheduled run already succeeded) and short-circuits without
+          # dispatching any subagents — leaving the pre-existing file
+          # untouched. It still contains the right keywords (from the
+          # earlier run), so the keyword check alone would pass. Catch this
+          # by requiring the file to actually differ from the committed
+          # HEAD state (checkout gives us that baseline).
+          REPORT_CHANGED=$(git status --porcelain -- "$REPORT_FILE")
+          if [ -s "$REPORT_FILE" ] && grep -qiE "Karta Zlece|DIRECTOR|Gem Inwestycyjny" "$REPORT_FILE" && [ -n "$REPORT_CHANGED" ]; then
             echo "REPORT_OK=true" >> "$GITHUB_ENV"
-            echo "Report present and non-trivial: $REPORT_FILE"
+            echo "Report present, non-trivial, and changed this run: $REPORT_FILE"
+          elif [ -s "$REPORT_FILE" ] && [ -z "$REPORT_CHANGED" ]; then
+            echo "REPORT_OK=false" >> "$GITHUB_ENV"
+            echo "::error::Pipeline reported success but $REPORT_FILE is byte-identical to the committed version — orchestrator likely short-circuited (saw today's report already exists) without dispatching any subagents."
           else
             echo "REPORT_OK=false" >> "$GITHUB_ENV"
             echo "::error::Pipeline reported success but $REPORT_FILE is missing/empty — partial run (no Director report)."

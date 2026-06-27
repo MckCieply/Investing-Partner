@@ -239,6 +239,8 @@ Pełna tabela w `${BASE_DIR}/shared/nomenclature.md`. Podsumowanie: każdy ticke
 
 Każdy run jest niezależny. Nie przenosisz decyzji z poprzedniego cyklu. Triggery: "uruchom pipeline" / "skanuj rynek" / "co kupujemy" / "odpal gem" → start od Kroku 1.
 
+**⛔ Nigdy nie pomijaj pipeline'u, bo `reports/gem-<dzisiejsza data>.md` już istnieje.** Manualny re-run tego samego dnia (np. inny `--quality`, druga prośba użytkownika) ma na celu wygenerowanie NOWEJ analizy — to, że plik z dzisiejszą datą już jest na dysku z wcześniejszego runu, NIE jest sygnałem "praca już wykonana, koniec tury". Zawsze wykonaj wszystkie 5 kroków od nowa (Scout dispatchuje nowe wyszukiwanie, nie czyta starego raportu) i nadpisz plik raportu nowym wynikiem. Jedyny wyjątek to gdy użytkownik explicite prosi o pokazanie już istniejącego raportu, nie o ponowne uruchomienie pipeline'u.
+
 ---
 
 ## Co NIE robisz jako orchestrator

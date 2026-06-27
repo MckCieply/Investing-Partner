@@ -32,6 +32,18 @@ Repo zawiera dwa niezależne, zautomatyzowane przez GitHub Actions narzędzia in
 - Pobiera aktualne ceny (`quant_scanner.py`), flipuje `status` na `HIT_TARGET`/`STOPPED` (ustawia `date_resolved` raz, przy pierwszym rozstrzygnięciu), liczy `pct_to_target`.
 - Wynik: `reports/tracker-<data>.md` + mail, commit zaktualizowanego CSV do repo. Te same fixy (OIDC `id-token: write`, `git remote set-url` przed push) co w `gem-pipeline.yml`.
 
+## Dokumentacja — pełne dokumenty referencyjne
+
+Ten plik (CLAUDE.md) jest zawsze ładowany do kontekstu — ma zostać krótki. Poniżej katalog dokumentów-dzieci: każdy odpowiada za jeden temat, otwieraj tylko ten, którego aktualnie potrzebujesz.
+
+- [`README.md`](README.md) — szybki start Position Auditora (instalacja, lokalny run, edycja `holdings.json`).
+- [`skills/gem-position-auditor/SKILL.md`](skills/gem-position-auditor/SKILL.md) — pełna logika Agenta 6: dobór metody stopa per bucket (ATR% vs SMA/RSI), transze, histereza, format diffu tygodniowego.
+- [`.claude/skills/gem-inwestycyjny/SKILL.md`](.claude/skills/gem-inwestycyjny/SKILL.md) — orchestrator pipeline'u 5 subagentów (Scout→Director) + kontrakt synchroniczności dispatchu.
+- [`.claude/skills/gem-inwestycyjny/PLAN_recommendation_tracking.md`](.claude/skills/gem-inwestycyjny/PLAN_recommendation_tracking.md) — schemat CSV i zasady logowania rekomendacji BUY do `history/recommendations.csv` (krok 6, zaimplementowany — patrz sekcja 2 wyżej).
+- [`backtest/README.md`](backtest/README.md) — projekt badawczy "czy setup wejściowy daje edge nad SPY": metodologia, wynik (Grupy 1–3: FAIL), i stamtąd dalsze linki do `HANDOFF_pead_mwig40.md` (nowy, wciąż otwarty wątek PEAD/mWIG40) i notatek walidacyjnych grup 2–3.
+
+Nieobjęte katalogiem (logi, nie dokumentacja referencyjna): `reports/*.md` (wygenerowane raporty pipeline'u/trackera per data) i `session-handoffs/*.md` (zapiski z sesji). Przeglądaj je bezpośrednio, gdy potrzebujesz historii konkretnego dnia.
+
 ## Pułapki, na które już trafiliśmy (nie powtarzać)
 
 - `dawidd6/action-send-mail@v3` **nie ma** inputu `content_type` — tylko `convert_markdown: true` + `html_body`. Próba dodania `content_type` wywala krok z "Unexpected input(s)".
@@ -39,3 +51,4 @@ Repo zawiera dwa niezależne, zautomatyzowane przez GitHub Actions narzędzia in
 - Ten sam action podstawia własny git credential helper na runnerze — kolejny krok robiący `git push` zwykłym `actions/checkout` tokenem dostaje "Authentication failed". Fix: jawnie `git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/...` przed push w kroku commitującym.
 - Skille dla `claude-code-action@v1` muszą leżeć w `.claude/skills/<nazwa>/` w repo, żeby były wykrywalne w CI (lokalna instalacja w Claude Desktop to nie to samo miejsce).
 - Lokalny npm/Node na maszynie użytkownika był zepsuty (minizlib/Node 24 incompatibility) — Claude Code CLI instalujemy natywnym installerem (`irm https://claude.ai/install.ps1 | iex`), nie przez npm.
+- Manualny re-run `gem-pipeline.yml` tego samego dnia (np. inny `--quality`) może się "udać" bez wykonania żadnej pracy: orchestrator widzi, że `reports/gem-<data>.md` już istnieje z wcześniejszego runu i kończy turę w ~5 turns/20s bez dispatchu Scout→Director, zostawiając stary plik nietknięty — `verify report produced` przechodził, bo sprawdzał tylko obecność/keywords w pliku, nie to, czy ten konkretny run go zmienił. Fix: SKILL.md ma teraz explicit zakaz pomijania pipeline'u z tego powodu + workflow dodatkowo wymaga `git status --porcelain` na pliku raportu (musi się różnić od HEAD).
