@@ -6,6 +6,8 @@
 - **Jestem jedynym programistą.** Nie trzeba ostrzegać przed "nadpisaniem czyjejś pracy" ani proponować PR-flow — to nie ma zastosowania w tym repo.
 - Wyjątek: rzeczy nieodwracalne lub niosące realny koszt (force-push, reset --hard, usuwanie tagów/branchy, zmiany w sekretach/uprawnieniach repo) — o tych nadal pytaj.
 - Commit messages: krótkie, po angielsku, konwencja `type(scope): opis` (np. `fix(gem-pipeline): ...`, `feat: ...`).
+- **Pipeline first.** Jeśli dane zadanie może być wykonane przez GitHub Actions (cron, workflow_dispatch, Python skrypt w CI) — powinno być tam zrobione, nie lokalnie ani ręcznie w sesji. Ręczna praca lokalna to prototyp lub jednorazowy fix; docelowo każde powtarzalne działanie trafia do pipeline'u.
+- **Persistuj dane przedstawione przez użytkownika.** Gdy użytkownik podaje dane (pozycje portfela, ceny wejścia, decyzje o kupnie/sprzedaży, wyniki transakcji) — zanim zakończę pracę z tymi danymi, zweryfikuj czy powinny być zapisane do repo (np. `holdings.json`, `history/recommendations.csv`, `stops_state.json`). Dane prezentowane jako zdjęcie/screenshot traktuj jak dane do wprowadzenia, a nie tylko do przeczytania.
 
 ## Co to za projekt
 
