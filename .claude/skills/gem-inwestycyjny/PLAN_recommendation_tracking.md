@@ -1,4 +1,4 @@
-# Plan: Recommendation Tracking (proposal — not yet implemented)
+# Plan: Recommendation Tracking (zaimplementowane — krok 6 orchestratora)
 
 ## Cel
 

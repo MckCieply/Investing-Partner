@@ -9,6 +9,12 @@ w pipelinie `gem-inwestycyjny`. Setupy, które nie przejdą, zostają poza pipel
 > zero z potwierdzonym przez placebo edge'em. Szczegóły i interpretacja niżej oraz w
 > `results/group3_data_validation_notes.md`.
 
+## Pokrewne dokumenty
+
+- [`results/group2_data_validation_notes.md`](results/group2_data_validation_notes.md) — walidacja danych/triggerów dla Grupy 2.
+- [`results/group3_data_validation_notes.md`](results/group3_data_validation_notes.md) — walidacja danych/triggerów dla Grupy 3 (ostatniej przed werdyktem FAIL).
+- [`HANDOFF_pead_mwig40.md`](HANDOFF_pead_mwig40.md) — **nowy, wciąż otwarty wątek** po werdykcie powyżej: PEAD/momentum na mWIG40 (inny reżim efektywności rynku niż US, gdzie testowano Grupy 1–3).
+
 ---
 
 ## 1. Hipoteza i pytanie badawcze
