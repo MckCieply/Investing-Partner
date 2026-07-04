@@ -50,6 +50,16 @@ jobs:
             --allowedTools "Task" "Agent" "ToolSearch" "Read" "Write" "Edit" "Glob" "Grep" "WebSearch" "WebFetch" "NotebookRead" "TodoWrite" "Bash(pip install *)" "Bash(python3 *)" "Bash(python *)" "Bash(mkdir -p *)" "Bash(ls *)" "Bash(find *)" "Bash(cat *)" "Bash(echo *)" "Bash(git status*)" "Bash(git log*)" "Bash(git diff*)" "Bash(curl *)"
             --disallowedTools "ScheduleWakeup" "SendMessage" "TaskCreate" "TaskUpdate" "TaskGet" "TaskList" "TaskOutput" "TaskStop" "Monitor" "PushNotification"
 
+      - name: annotate re-entry context
+        if: always()
+        run: |
+          # pamiec miedzysystemowa: dopisz do swiezo zalogowanych rekomendacji
+          # kontekst wyjscia, jesli ich ticker jest w closed_positions.csv.
+          # Deterministyczny, idempotentny, tylko stdlib — bez pip.
+          python3 skills/gem-position-auditor/reentry_context.py \
+            .claude/skills/gem-inwestycyjny/history/recommendations.csv closed_positions.csv \
+            || echo "reentry_context: non-fatal, pomijam"
+
       - name: capture run log
         if: always()
         run: |

@@ -103,6 +103,16 @@ jobs:
             tail -n 10 "$SUMMARY_FILE" > "$SUMMARY_FILE.tmp" && mv "$SUMMARY_FILE.tmp" "$SUMMARY_FILE"
           fi
 
+      - name: annotate re-entry context
+        if: always()
+        run: |
+          # pamiec miedzysystemowa: dopisz do rekomendacji kontekst wyjscia, jesli
+          # ich ticker jest w closed_positions.csv (Auditor niedawno go zamknal).
+          # Deterministyczny, idempotentny, tylko stdlib — bez pip.
+          python3 skills/gem-position-auditor/reentry_context.py \
+            .claude/skills/gem-inwestycyjny/history/recommendations.csv closed_positions.csv \
+            || echo "reentry_context: non-fatal, pomijam"
+
       - name: verify report produced
         if: always()
         run: |
