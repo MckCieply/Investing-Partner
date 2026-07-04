@@ -5,9 +5,14 @@ on:
   workflow_dispatch:          # reczne odpalenie z zakladki Actions
 permissions:
   contents: read
+  id-token: write             # OIDC wymagany przez claude-code-action (job narracyjny)
 jobs:
+  # --- BRAMKA TECHNICZNA: deterministyczny skaner, bez LLM, zawsze ---
   reentry:
     runs-on: ubuntu-latest
+    outputs:
+      has_candidates: ${{ steps.gate.outputs.has_candidates }}
+      tickers: ${{ steps.gate.outputs.tickers }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -18,17 +23,37 @@ jobs:
         run: |
           if [ ! -s closed_positions.csv ]; then
             echo "closed_positions.csv brak/pusty — nic do analizy, pomijam."
+            echo '[]' > reentry_candidates.json
             echo "SKIP_MAIL=true" >> "$GITHUB_ENV"
             exit 0
           fi
           python skills/gem-position-auditor/reentry_scanner.py closed_positions.csv \
-            --holdings holdings.json --html-out reentry_report.html | tee reentry_report.txt
+            --holdings holdings.json --html-out reentry_report.html \
+            --candidates-out reentry_candidates.json | tee reentry_report.txt
+
+      - name: gate on candidates
+        id: gate
+        if: always()
+        run: |
+          COUNT=$(python -c "import json,os; p='reentry_candidates.json'; print(len(json.load(open(p))) if os.path.exists(p) else 0)")
+          TICKERS=$(python -c "import json,os; p='reentry_candidates.json'; d=json.load(open(p)) if os.path.exists(p) else []; print(','.join(x['xtb'] for x in d))")
+          if [ "$COUNT" -gt 0 ]; then echo "has_candidates=true" >> "$GITHUB_OUTPUT"; else echo "has_candidates=false" >> "$GITHUB_OUTPUT"; fi
+          echo "tickers=$TICKERS" >> "$GITHUB_OUTPUT"
+          echo "RE-ENTER candidates: $COUNT ($TICKERS)"
+
+      - name: upload candidates
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reentry-candidates
+          path: reentry_candidates.json
+          retention-days: 7
 
       - name: set report date
         if: always()
         run: echo "REPORT_DATE=$(date +%d.%m.%Y)" >> "$GITHUB_ENV"
 
-      - name: email report
+      - name: email report (technical)
         if: always() && env.SKIP_MAIL != 'true'
         uses: dawidd6/action-send-mail@v3
         with:
@@ -40,3 +65,75 @@ jobs:
           to: ${{ secrets.MAIL_TO }}
           subject: "Re-entry Review ${{ env.REPORT_DATE }}"
           html_body: file://reentry_report.html
+
+  # --- WARSTWA NARRACYJNA: LLM, tylko gdy bramka techniczna wypuscila kandydatow ---
+  narrative:
+    needs: reentry
+    if: needs.reentry.outputs.has_candidates == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: fetch candidates from technical job
+        uses: actions/download-artifact@v4
+        with:
+          name: reentry-candidates
+
+      - name: narrative / thesis check
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Jesteś analitykiem re-entry. Pozycje z `reentry_candidates.json` przeszły
+            BRAMKĘ TECHNICZNĄ re-entry scannera (trend/momentum odzyskane). Twoim
+            zadaniem jest ocenić, czy NARRACJA / TEZA inwestycyjna, która czyniła je
+            atrakcyjnymi, wróciła lub się wzmocniła od momentu naszego wyjścia. To NIE
+            jest zlecenie kupna — to warstwa jakościowa nad sygnałem technicznym.
+
+            Krok 1. Wczytaj `reentry_candidates.json` (tickery + kontekst: cena, avg_cost,
+            exit_stop, since_exit_pct, orig_reason, date_closed) oraz odnośne wiersze z
+            `closed_positions.csv`.
+
+            Krok 2. Dla KAŻDEGO tickera użyj WebSearch (i WebFetch gdy trzeba) na newsy z
+            ostatnich ~3–6 miesięcy: wyniki kwartalne, guidance, katalizatory, zmiany w
+            sektorze, ryzyka (litigation, downgrade, odpływ klientów). Skup się na tym, co
+            zmieniło się OD daty naszego wyjścia (`date_closed`).
+
+            Krok 3. Wydaj werdykt narracyjny per ticker:
+              - THESIS_BACK  — teza wróciła/wzmocniona, katalizator świeży → warto głębiej spojrzeć
+              - MIXED        — sygnały mieszane, brak jasnego katalizatora
+              - THESIS_DEAD  — teza się zepsuła (miss, guidance cut, problem strukturalny) → odpuścić
+            Każdy werdykt: 2–4 zdania uzasadnienia + 1 kluczowy katalizator ORAZ 1 kluczowe
+            ryzyko, z konkretami (liczby, daty).
+
+            Krok 4. Zapisz raport jako `reentry_narrative.md`:
+              - nagłówek z datą,
+              - tabela: Ticker | Werdykt techniczny (RE-ENTER) | Werdykt narracyjny | Katalizator | Ryzyko,
+              - pod tabelą sekcja per ticker z pełnym uzasadnieniem i źródłami (linki),
+              - na końcu jednozdaniowe przypomnienie: to analiza, nie zlecenie; decyzję o wejściu podejmuje użytkownik.
+
+            Nie commituj niczego. Mandat geograficzny: USA/Europa (nasze pozycje i tak są z tego obszaru).
+          claude_args: |
+            --max-turns 40
+            --max-budget-usd 5.00
+            --permission-mode bypassPermissions
+            --allowedTools "Read" "Write" "Glob" "Grep" "WebSearch" "WebFetch" "TodoWrite" "Bash(cat *)" "Bash(ls *)"
+            --disallowedTools "ScheduleWakeup" "SendMessage" "TaskCreate" "TaskUpdate" "TaskGet" "TaskList" "TaskOutput" "TaskStop" "Monitor" "PushNotification"
+
+      - name: set report date
+        if: always()
+        run: echo "REPORT_DATE=$(date +%d.%m.%Y)" >> "$GITHUB_ENV"
+
+      - name: email narrative
+        if: always() && hashFiles('reentry_narrative.md') != ''
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.GMAIL_USERNAME }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          from: Gem Re-entry Narrative
+          to: ${{ secrets.MAIL_TO }}
+          subject: "Re-entry — narracja/teza ${{ env.REPORT_DATE }}"
+          html_body: file://reentry_narrative.md
+          convert_markdown: true

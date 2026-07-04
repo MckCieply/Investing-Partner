@@ -20,9 +20,11 @@ Repo zawiera dwa niezależne, zautomatyzowane przez GitHub Actions narzędzia in
 - Edycja pozycji = edytuj `holdings.json` (pola: `xtb`, `yahoo`, `avg_cost`).
 - **Auto-log zamknięć.** Gdy ticker znika z `holdings.json`, a był w `stops_state.json` (= pozycja zamknięta między runami), auditor dopisuje go do `closed_positions.csv` z powodem (`STOP_HIT` / `TP_OR_MANUAL` / `CLOSED`) i szacowanym PnL (z ostatniego stopa/tp — realny fill z XTB potwierdzaj ręcznie). `stops_state.json` trzyma teraz też `avg_cost`/`yahoo`/`last_price`/`exit_now` per ticker, żeby było z czego to policzyć.
 
-### 1b. Re-entry Scanner (Agent 6b, `skills/gem-position-auditor/reentry_scanner.py`, `.github/workflows/reentry-review.yml`)
-- Deterministyczny (Python, bez LLM — **nie zużywa limitu Pro**) skaner: czyta `closed_positions.csv` i ocenia, czy setup techniczny, który nas wybił, się odwrócił (cena vs stary stop, SMA50/200, ret20, RSI) → werdykt `RE-ENTER` / `WATCH` / `SKIP`. To skan ilościowy, nie sygnał kupna.
-- Cron: czwartek 08:00 UTC + `workflow_dispatch`. Pomija tickery już z powrotem w `holdings.json` oraz zamknięte dawniej niż `--max-age-days` (365). Wynik: HTML mailem (bez commitu — raport efemeryczny).
+### 1b. Re-entry Review (Agent 6b, `skills/gem-position-auditor/reentry_scanner.py`, `.github/workflows/reentry-review.yml`)
+Dwuwarstwowy przepływ, cron czwartek 08:00 UTC + `workflow_dispatch`:
+- **Bramka techniczna (job `reentry`, zawsze, bez LLM — nie zużywa limitu Pro).** Skaner czyta `closed_positions.csv` i ocenia, czy setup techniczny, który nas wybił, się odwrócił (cena vs stary stop, SMA50/200, ret20, RSI) → werdykt `RE-ENTER` / `WATCH` / `SKIP`. Pomija tickery już z powrotem w `holdings.json` oraz zamknięte dawniej niż `--max-age-days` (365). Zapisuje `reentry_candidates.json` (tickery z `RE-ENTER`) i wysyła HTML mailem (bez commitu — raport efemeryczny).
+- **Warstwa narracyjna (job `narrative`, LLM, tylko gdy `has_candidates == true`).** Odpala się **wyłącznie** gdy bramka techniczna wypuściła ≥1 `RE-ENTER` (gate przez output joba + `if:`), więc w tygodnie bez kandydatów limit Pro się nie rusza. Dla każdego kandydata robi WebSearch newsów od daty wyjścia i wydaje werdykt `THESIS_BACK` / `MIXED` / `THESIS_DEAD` (raport `reentry_narrative.md` mailem). Auth i pułapki jak w `gem-pipeline.yml` (OIDC `id-token: write`, GitHub App). Lista kandydatów wędruje między jobami przez `upload/download-artifact`.
+- To skan/analiza, **nie sygnał kupna** — decyzję o wejściu podejmuje użytkownik.
 
 ### 2. Gem Inwestycyjny (`.claude/skills/gem-inwestycyjny/`, `.github/workflows/gem-pipeline.yml`)
 - Pipeline 5 subagentów LLM (Scout → Quant → Alpha → Auditor → Director) szukający **nowych** kandydatów do wejścia (nie zarządza istniejącymi pozycjami — to robi Position Auditor).

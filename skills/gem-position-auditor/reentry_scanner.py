@@ -26,7 +26,7 @@ Uzycie:
   python skills/gem-position-auditor/reentry_scanner.py closed_positions.csv \
       --holdings holdings.json --html-out reentry_report.html
 """
-import sys, os, csv, argparse, math
+import sys, os, csv, json, argparse, math
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -173,6 +173,8 @@ def main():
     ap.add_argument("closed", nargs="?", default="closed_positions.csv")
     ap.add_argument("--holdings", default="holdings.json")
     ap.add_argument("--html-out", default="reentry_report.html")
+    ap.add_argument("--candidates-out", default="reentry_candidates.json",
+                    help="JSON z tickerami ktore przeszly bramke techniczna (RE-ENTER) -> wejscie warstwy narracyjnej LLM")
     ap.add_argument("--max-age-days", type=int, default=365)
     args = ap.parse_args()
 
@@ -183,7 +185,6 @@ def main():
 
     held = set()
     if os.path.exists(args.holdings):
-        import json
         try:
             for p in json.load(open(args.holdings, encoding="utf-8")):
                 held.add(p.get("xtb", p.get("yahoo")))
@@ -221,6 +222,16 @@ def main():
     html = build_html(rows, today_display, len(candidates))
     open(args.html_out, "w", encoding="utf-8").write(html)
     print(f"HTML report zapisany -> {args.html_out}")
+
+    # lista tickerow ktore przeszly bramke techniczna -> wejscie warstwy narracyjnej LLM.
+    # Zawsze zapisujemy plik (pusta lista == brak kandydatow -> workflow pomija krok LLM).
+    passed = [{
+        "xtb": r["xtb"], "price": r["price"], "avg_cost": r["avg_cost"],
+        "exit_stop": r["exit_stop"], "since_exit_pct": r["since_exit_pct"],
+        "orig_reason": r["orig_reason"], "date_closed": r["date_closed"], "note": r["note"],
+    } for r in rows if r.get("verdict") == "RE-ENTER"]
+    json.dump(passed, open(args.candidates_out, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+    print(f"Kandydaci RE-ENTER ({len(passed)}) -> {args.candidates_out}")
 
 
 if __name__ == "__main__":
