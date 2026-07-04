@@ -2,6 +2,7 @@ name: weekly-entry-pipeline
 on:
   schedule:
     - cron: '0 18 * * 0'      # niedziela 18:00 UTC (~20:00 PL)
+    - cron: '0 14 * * 3'      # sroda 14:00 UTC (~16:00 PL) - drugi run w tygodniu
   workflow_dispatch:
     inputs:
       quality:
