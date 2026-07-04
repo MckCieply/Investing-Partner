@@ -1,0 +1,42 @@
+name: weekly-reentry-review
+on:
+  schedule:
+    - cron: '0 8 * * 4'      # czwartek 08:00 UTC (~10:00 PL) - przeglad powrotu do zamknietych pozycji
+  workflow_dispatch:          # reczne odpalenie z zakladki Actions
+permissions:
+  contents: read
+jobs:
+  reentry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install -r requirements.txt
+
+      - name: run reentry scanner
+        run: |
+          if [ ! -s closed_positions.csv ]; then
+            echo "closed_positions.csv brak/pusty — nic do analizy, pomijam."
+            echo "SKIP_MAIL=true" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          python skills/gem-position-auditor/reentry_scanner.py closed_positions.csv \
+            --holdings holdings.json --html-out reentry_report.html | tee reentry_report.txt
+
+      - name: set report date
+        if: always()
+        run: echo "REPORT_DATE=$(date +%d.%m.%Y)" >> "$GITHUB_ENV"
+
+      - name: email report
+        if: always() && env.SKIP_MAIL != 'true'
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.GMAIL_USERNAME }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          from: Gem Re-entry Scanner
+          to: ${{ secrets.MAIL_TO }}
+          subject: "Re-entry Review ${{ env.REPORT_DATE }}"
+          html_body: file://reentry_report.html

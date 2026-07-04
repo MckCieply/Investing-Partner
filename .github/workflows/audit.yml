@@ -37,6 +37,7 @@ jobs:
           git config user.name "gem-bot"
           git config user.email "gem-bot@users.noreply.github.com"
           [ -f stops_state.json ] && git add stops_state.json
+          [ -f closed_positions.csv ] && git add closed_positions.csv
           [ -f audit_report.txt ] && git add audit_report.txt
           [ -f audit_report.html ] && git add audit_report.html
           [ -d skills/gem-position-auditor/history/runbook ] && git add skills/gem-position-auditor/history/runbook

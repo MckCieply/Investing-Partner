@@ -25,7 +25,7 @@ SPIKE -> MEANREVERT gdy cena spada pod SMA50.
 Stop broni DOLU (Sell Stop pod cena). Transze zdejmuja GORE (Sell Limit nad cena).
 Stop >= cena => trend pekl => WYJDZ TERAZ.
 """
-import sys, json, argparse, math, os
+import sys, json, argparse, math, os, csv
 from datetime import datetime
 
 try:
@@ -37,6 +37,9 @@ except ImportError:
     sys.exit(1)
 
 STATE_FILE = "stops_state.json"
+CLOSED_FILE = "closed_positions.csv"   # ledger zamknietych/wybitych pozycji (auto-log)
+CLOSED_FIELDS = ["date_closed", "xtb", "yahoo", "avg_cost", "exit_stop",
+                 "bucket", "reason", "pnl_pct_est", "notes"]
 CAP = 0.20          # max luz stopa od ceny (-20%)
 FLOOR = 0.05        # min dystans stopa od ceny (-5%) dla akcji
 HI_ATR = 0.10       # prog ATR% dla "parabola -> transze"
@@ -317,10 +320,80 @@ def build_html(rows, last_run_display, n, today_display):
     html.append("</body></html>")
     return "\n".join(html)
 
+def log_closures(prev, holdings, path, today):
+    """Wykryj pozycje ktore byly w poprzednim stanie (stops_state.json) a znikly
+    z holdings.json = zamkniete miedzy runami. Dopisz je do closed_positions.csv.
+
+    Rozroznienie powodu (best-effort, na podstawie ostatniego znanego stanu):
+      - STOP_HIT      : stop >= ostatnia cena LUB run zglaszal exit_now (wybicie stopem)
+      - TP_OR_MANUAL  : pozycja byla na planie transz (Sell Limit) -> realizacja zysku/reczne
+      - CLOSED        : znikla bez wczesniejszego sygnalu wyjscia -> prawdopodobnie reczna sprzedaz
+
+    Cena wyjscia jest SZACOWANA z ostatniego stopa/tp (nie znamy realnego fillu z XTB),
+    stad pnl_pct_est i nota 'confirm actual fill'. Zwraca liste (xtb, reason, pnl) do wydruku.
+    """
+    current = {p.get("xtb", p["yahoo"]) for p in holdings}
+    gone = [k for k in prev if k != "_meta" and k not in current]
+    if not gone:
+        return []
+
+    # dedupe: nie loguj drugi raz tego samego tickera tego samego dnia (np. re-run workflowa)
+    already = set()
+    if os.path.exists(path):
+        try:
+            with open(path, newline="", encoding="utf-8") as f:
+                for row in csv.DictReader(f):
+                    already.add((row.get("xtb"), row.get("date_closed")))
+        except Exception:
+            pass
+
+    write_header = not os.path.exists(path)
+    logged = []
+    with open(path, "a", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=CLOSED_FIELDS)
+        if write_header:
+            w.writeheader()
+        for k in gone:
+            if (k, today) in already:
+                continue
+            pe = prev[k]
+            avg = pe.get("avg_cost")
+            last_price = pe.get("last_price")
+            if pe.get("type") == "TRANCHE":
+                exit_ref = pe.get("tp1")
+                reason = "TP_OR_MANUAL"
+                note = "auto-logged: left holdings.json while on tranche plan; likely TP/manual, exit estimated from tp1"
+            else:
+                exit_ref = pe.get("stop")
+                hit = pe.get("exit_now") or (
+                    isinstance(exit_ref, (int, float)) and isinstance(last_price, (int, float))
+                    and exit_ref >= last_price)
+                reason = "STOP_HIT" if hit else "CLOSED"
+                note = ("auto-logged: left holdings.json; exit estimated from last stop, confirm actual XTB fill"
+                        if hit else
+                        "auto-logged: left holdings.json with no prior exit signal; likely manual sell, confirm")
+            pnl = ""
+            if isinstance(avg, (int, float)) and avg and isinstance(exit_ref, (int, float)):
+                pnl = round((exit_ref / avg - 1) * 100, 1)
+            w.writerow({
+                "date_closed": today,
+                "xtb": k,
+                "yahoo": pe.get("yahoo", ""),
+                "avg_cost": avg if avg is not None else "",
+                "exit_stop": round(exit_ref, 4) if isinstance(exit_ref, (int, float)) else "",
+                "bucket": pe.get("bucket", ""),
+                "reason": reason,
+                "pnl_pct_est": pnl,
+                "notes": note,
+            })
+            logged.append((k, reason, pnl))
+    return logged
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("holdings")
     ap.add_argument("--state", default=STATE_FILE)
+    ap.add_argument("--closed", default=CLOSED_FILE)
     ap.add_argument("--html-out", default="audit_report.html")
     args = ap.parse_args()
     holdings = json.load(open(args.holdings, encoding="utf-8"))
@@ -353,13 +426,30 @@ def main():
             for n in r.get("notes", []): print(f"             - {n}")
     print("="*74)
 
-    # zapis stanu
-    state = {"_meta": {"date": datetime.now().strftime("%Y-%m-%d")}}
-    for r in rows:
+    # auto-log pozycji zamknietych od ostatniego runu (uzywa STAREGO stanu `prev`,
+    # zanim nadpiszemy go biezacym) -> closed_positions.csv
+    today_iso = datetime.now().strftime("%Y-%m-%d")
+    closed = log_closures(prev, holdings, args.closed, today_iso)
+    if closed:
+        print("-"*74)
+        print("# ZAMKNIETE POZYCJE (auto-log -> " + args.closed + ")")
+        for xtb, reason, pnl in closed:
+            pnl_s = f"{pnl}%" if pnl != "" else "n/d"
+            print(f"  {xtb:10s} {reason:14s} est PnL {pnl_s}")
+        print("="*74)
+
+    # zapis stanu (persistujemy tez avg_cost/yahoo/last_price/exit_now, by przyszly
+    # auto-log zamkniec mial z czego policzyc PnL i powod wyjscia)
+    state = {"_meta": {"date": today_iso}}
+    for pos, r in zip(holdings, rows):
         if "error" in r: continue
         e = {"bucket": r["bucket"], "type": r["type"]}
         if r["type"] == "TRANCHE": e.update({"tp1": r["tp1"], "tp2": r["tp2"]})
         else: e["stop"] = r["stop"]
+        e["avg_cost"] = pos.get("avg_cost")
+        e["yahoo"] = pos.get("yahoo")
+        e["last_price"] = r.get("price")
+        e["exit_now"] = r.get("exit_now", False)
         state[r["xtb"]] = e
     json.dump(state, open(args.state, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
     print(f"Stan zapisany -> {args.state}")
