@@ -21,7 +21,9 @@ SPY = "SPY"
 def _cache_path(ticker, start, end):
     key = f"{ticker}_{start}_{end}"
     h = hashlib.sha1(key.encode()).hexdigest()[:16]
-    return os.path.join(CACHE_DIR, f"{h}.parquet")
+    # CSV, not parquet: avoids a hard pyarrow/fastparquet dependency for what are
+    # small per-ticker OHLCV frames where parquet's performance edge doesn't matter.
+    return os.path.join(CACHE_DIR, f"{h}.csv")
 
 
 def get_history(ticker, start, end, retries=3):
@@ -32,7 +34,9 @@ def get_history(ticker, start, end, retries=3):
     """
     path = _cache_path(ticker, start, end)
     if os.path.exists(path):
-        return pd.read_parquet(path)
+        cached = pd.read_csv(path, index_col=0, parse_dates=True)
+        cached.index.name = "Date"
+        return cached
 
     last_err = None
     for attempt in range(retries):
@@ -47,7 +51,8 @@ def get_history(ticker, start, end, retries=3):
 
     if df is None or df.empty:
         df = pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume"])
-        df.to_parquet(path)
+        df.index.name = "Date"
+        df.to_csv(path)
         return df
 
     if isinstance(df.columns, pd.MultiIndex):
@@ -55,7 +60,7 @@ def get_history(ticker, start, end, retries=3):
 
     df = df[["Open", "High", "Low", "Close", "Volume"]].copy()
     df.index.name = "Date"
-    df.to_parquet(path)
+    df.to_csv(path)
     return df
 
 

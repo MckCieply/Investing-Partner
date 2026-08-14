@@ -1,0 +1,2 @@
+rule,horizon,n,win_rate,edge_vs_spy_median,strongest_placebo_edge,real_minus_strongest_placebo,positive_cohorts,n_ok,win_ok,edge_ok,cohort_ok,placebo_ok,verdict
+quant_gate_3condition,90,386,0.5984,-0.0209,0.0081,-0.029,4/13,True,True,False,False,False,FAIL (edge=-0.0209<=0.05; cohorts=4/13<60%; placebo not clearly weaker (gate adds no measurable edge over partial conditions))

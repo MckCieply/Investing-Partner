@@ -1,0 +1,10 @@
+setup,label,horizon,n,win_rate,median_return,edge_vs_spy_median,positive_cohorts
+s_quant_gate,real (3-gate: SMA50 & SMA200 & RSI<70),30,399,0.5789,0.0155,0.0009,5/13
+s_quant_gate,real (3-gate: SMA50 & SMA200 & RSI<70),60,395,0.6051,0.0312,0.0003,6/13
+s_quant_gate,real (3-gate: SMA50 & SMA200 & RSI<70),90,386,0.5984,0.0326,-0.0209,4/13
+s_quant_gate_placebo_sma_both_norsi,"placebo B (SMA50 & SMA200, no RSI)",30,391,0.5627,0.0159,-0.0037,5/13
+s_quant_gate_placebo_sma_both_norsi,"placebo B (SMA50 & SMA200, no RSI)",60,388,0.5696,0.0273,-0.0128,3/13
+s_quant_gate_placebo_sma_both_norsi,"placebo B (SMA50 & SMA200, no RSI)",90,383,0.6057,0.0408,-0.0063,4/13
+s_quant_gate_placebo_sma50_only,placebo A (SMA50 only),30,397,0.5894,0.0174,0.0003,7/14
+s_quant_gate_placebo_sma50_only,placebo A (SMA50 only),60,394,0.632,0.0433,0.0077,9/14
+s_quant_gate_placebo_sma50_only,placebo A (SMA50 only),90,389,0.653,0.0488,0.0081,6/14
