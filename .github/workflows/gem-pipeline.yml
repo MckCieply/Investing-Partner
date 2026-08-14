@@ -3,6 +3,7 @@ on:
   schedule:
     - cron: '0 18 * * 0'      # niedziela 18:00 UTC (~20:00 PL)
     - cron: '0 14 * * 3'      # sroda 14:00 UTC (~16:00 PL) - drugi run w tygodniu
+    - cron: '0 0 * * 5'       # piatek 00:00 UTC (~02:00 PL) - trzeci run, podbita czestotliwosc
   workflow_dispatch:
     inputs:
       quality:
