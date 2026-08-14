@@ -14,6 +14,7 @@ w pipelinie `gem-inwestycyjny`. Setupy, które nie przejdą, zostają poza pipel
 - [`results/group2_data_validation_notes.md`](results/group2_data_validation_notes.md) — walidacja danych/triggerów dla Grupy 2.
 - [`results/group3_data_validation_notes.md`](results/group3_data_validation_notes.md) — walidacja danych/triggerów dla Grupy 3 (ostatniej przed werdyktem FAIL).
 - [`HANDOFF_pead_mwig40.md`](HANDOFF_pead_mwig40.md) — **nowy, wciąż otwarty wątek** po werdykcie powyżej: PEAD/momentum na mWIG40 (inny reżim efektywności rynku niż US, gdzie testowano Grupy 1–3).
+- [`results/quant_gate_verdict.md`](results/quant_gate_verdict.md) — **osobna walidacja (2026-08-14, FAIL)**: nie nowy kandydujący setup, tylko historyczny backtest bramki technicznej, którą `gem-inwestycyjny` już stosuje na żywo (Agent 02 Quant: SMA50/SMA200/RSI<70). Placebo pokazuje, że dodawanie SMA200 i RSI<70 do samej SMA50 pogarsza edge vs SPY, nie poprawia go.
 
 ---
 

@@ -1,0 +1,4 @@
+horizon,n,win_rate,median_return,mean_return,max_drawdown,sl_hit_rate,expectancy,edge_vs_spy_median,setup
+30,397,0.5894,0.0174,0.0181,-0.3335,0.2191,0.0181,0.0003,s_quant_gate_placebo_sma50_only
+60,394,0.632,0.0433,0.0435,-0.5404,0.3503,0.0435,0.0077,s_quant_gate_placebo_sma50_only
+90,389,0.653,0.0488,0.0676,-0.4405,0.4036,0.0676,0.0081,s_quant_gate_placebo_sma50_only

@@ -1,0 +1,4 @@
+horizon,n,win_rate,median_return,mean_return,max_drawdown,sl_hit_rate,expectancy,edge_vs_spy_median,setup
+30,399,0.5789,0.0155,0.0114,-0.2416,0.2256,0.0114,0.0009,s_quant_gate
+60,395,0.6051,0.0312,0.0356,-0.5276,0.3316,0.0356,0.0003,s_quant_gate
+90,386,0.5984,0.0326,0.0536,-0.5893,0.3964,0.0536,-0.0209,s_quant_gate
