@@ -6,16 +6,22 @@ z nich metryki, których żaden z istniejących przepływów nie liczy dziś:
 
 - `.claude/skills/gem-inwestycyjny/history/recommendations.csv` — lejek
   Scout→Quant→Alpha→Auditor→Director, win rate, kalibracja `timing_bucket`,
-  i **czy filtr Alpha/Auditor dodaje wartość** (porównanie kupionych vs
+  i **czy filtr pipeline'u dodaje wartość** (porównanie kupionych vs
   odrzuconych/wstrzymanych tickerów — Weekly Tracker aktualizuje cenę dla
-  obu grup, więc to porównanie jest możliwe bez dodatkowych pull'i).
+  wszystkich grup, więc to porównanie jest możliwe bez dodatkowych pull'i).
+  Od rozszerzenia Kroku 6 orchestratora (log obejmuje też tickery odrzucone
+  przez samego Quanta na SMA50/SMA200/RSI, `outcome` = `QUANT_REJECTED_*`)
+  grupa "odrzucone/wstrzymane" łączy oba filtry — techniczną bramkę Quanta
+  i późniejszy filtr Alpha/Auditora — w jedno porównanie: kupione vs
+  wszystko, co pipeline odsiał na dowolnym etapie. To świadoma decyzja, nie
+  przeoczenie: nie rozdzielamy wkładu każdego etapu z osobna.
 - `closed_positions.csv` — win rate i PnL zamkniętych pozycji Position
   Auditora, per powód (`STOP_HIT`/`TP_OR_MANUAL`) i per bucket.
 - `.claude/skills/gem-inwestycyjny/history/scout_tickers.csv` — nowość i
   powtarzalność propozycji Scouta, konwersja Scout→Quant.
 
 Raport otwiera się sekcją **Podsumowanie** — jedna tabela, jeden wiersz per
-obszar (rekomendacje, filtr Alpha/Auditor, timing, Position Auditor, Scout),
+obszar (rekomendacje, filtr pipeline'u, timing, Position Auditor, Scout),
 z werdyktem 🟢/🟡/🔴/⚪ dla każdego. ⚪ oznacza wprost "za mało danych", nigdy
 nie udaje pewności, której n nie uzasadnia. Reszta raportu (sekcje 1–6) to
 rozwinięcie każdego wiersza podsumowania w tabelę źródłową.

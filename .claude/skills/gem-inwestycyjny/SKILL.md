@@ -152,8 +152,11 @@ Ty (orchestrator) wykonujesz to sam, bez dispatchu — to czysta ekstrakcja dany
    ```
    rec_id,run_date,ticker_xtb,ticker_yahoo,nazwa,motyw,entry_price,stop_loss,target_price,r_r_ratio,timing_bucket,target_date_est,conviction,outcome,outcome_reason,katalizator,status,date_resolved,last_checked_date,last_checked_price,pct_change_since_entry,pct_to_target,notes
    ```
-3. Z `QUANT_REPORT` wyciągnij KAŻDY ticker z `ZIELONE_SWIATLO: TAK` (nie tylko te kupione przez Directora — to log do backtestu całego pipeline'u, nie tylko karty zleceń).
-4. Dla każdego takiego tickera złóż wiersz:
+3. Z `QUANT_REPORT` (sekcja `---WERYFIKACJA_SCOUT---`) przejdź przez KAŻDY ticker, niezależnie od `ZIELONE_SWIATLO` — teraz logujesz obie grupy, nie tylko `TAK`. Rozdziel je tak:
+
+**3a. Tickery z `ZIELONE_SWIATLO: TAK`** (nie tylko te kupione przez Directora — to log do backtestu całego pipeline'u, nie tylko karty zleceń).
+
+4a. Dla każdego takiego tickera złóż wiersz:
    - `entry_price`, `stop_loss` ← `QUANT_REPORT`
    - `target_price`, `r_r_ratio`, `timing_bucket`, `conviction` ← `ALPHA_MEMO` (sekcje `ANALIZA_ASYMETRII` / `RANKING`)
    - `target_date_est` ← oblicz z `run_date` + `timing_bucket`: `TERAZ` = +4 tygodnie, `WKRÓTCE` = +3 miesiące, `ODLEGŁY` = +6 miesięcy. Brak `timing_bucket` → puste.
@@ -166,9 +169,23 @@ Ty (orchestrator) wykonujesz to sam, bez dispatchu — to czysta ekstrakcja dany
      - Alpha zaklasyfikowała jako LISTA REZERWOWA → `RESERVE_ALPHA` (reason = czemu nie TOP PICK)
    - `status` = `OPEN` (zawsze przy pierwszym zapisie)
    - `date_resolved`/`last_checked_date`/`last_checked_price`/`pct_change_since_entry`/`pct_to_target` = puste (wypełnia Weekly Tracker)
-5. Dopisz (append) te wiersze do `recommendations.csv`. Tickery z `ZIELONE_SWIATLO: NIE` (odpadły już u Quanta) NIE są logowane — nigdy nie miały entry_price/target sensownego do trackingu.
 
-To krok jest niezależny od Weekly Trackera (Agent 06) — Weekly Tracker tylko CZYTA i AKTUALIZUJE ten plik, nie tworzy nowych wierszy.
+**3b. Tickery z `ZIELONE_SWIATLO: NIE`** (odpadły już u Quanta — nigdy nie dotarły do Alphy/Auditora/Directora, więc nie ma dla nich decyzji tych agentów, tylko liczby, które Quant już policzył i wypisał).
+
+4b. Dla każdego takiego tickera złóż wiersz:
+   - `entry_price` ← Quant `Cena`, `stop_loss` ← Quant `StopLoss(2xATR)` — hipotetyczny punkt odniesienia, mimo że nigdy nie handlowany.
+   - `target_price`, `r_r_ratio`, `timing_bucket`, `conviction`, `target_date_est` = puste — Alpha nigdy nie oceniła tego tickera, nie ma z czego tych pól wypełnić.
+   - `outcome` ← wybierz wg PIERWSZEJ niespełnionej bramki, w kolejności w jakiej Quant je sprawdza (`Cena>SMA50` → `Cena>SMA200` → `RSI<70`):
+     - Status Quanta = `ERROR` → `QUANT_REJECTED_ERROR` (reason = "Brak danych Yahoo" albo konkretny błąd z raportu, jeśli podany)
+     - inaczej `Cena>SMA50: N` → `QUANT_REJECTED_SMA50` (reason = `"Cena [Cena] < SMA50 [SMA50]"`, wartości z QUANT_REPORT)
+     - inaczej `Cena>SMA200: N` → `QUANT_REJECTED_SMA200` (reason = `"Cena [Cena] < SMA200 [SMA200]"`)
+     - inaczej `RSI<70: N` → `QUANT_REJECTED_RSI` (reason = `"RSI14=[RSI14] (próg <70)"`)
+   - Jeśli zawiodła więcej niż jedna bramka naraz, `outcome` bierze WYŁĄCZNIE pierwszą wg powyższej kolejności (SMA50 przed SMA200 przed RSI) — pozostałe niespełnione bramki dopisz do `outcome_reason` jako dodatkowy fragment po średniku, np. `"Cena 15.09 < SMA50 15.2; dodatkowo RSI14=71.2 (próg <70)"`.
+   - `status` = `OPEN` — Weekly Tracker śledzi cenę dla tego wiersza dokładnie tak samo jak dla każdego innego (to jedyny sposób, żeby z czasem ocenić, czy bramka Quanta jest trafnie skalibrowana, tzn. czy odrzuca faktycznie słabsze setupy).
+   - `date_resolved`/`last_checked_date`/`last_checked_price`/`pct_change_since_entry`/`pct_to_target` = puste (wypełnia Weekly Tracker).
+5. Dopisz (append) wszystkie wiersze z 4a i 4b do `recommendations.csv`, w kolejności w jakiej tickery pojawiają się w `QUANT_REPORT`. Każdy ticker, który Quant policzył, dostaje dokładnie jeden wiersz — bez wyjątków i bez pomijania `NIE`.
+
+To krok jest niezależny od Weekly Trackera (Agent 06) — Weekly Tracker tylko CZYTA i AKTUALIZUJE ten plik, nie tworzy nowych wierszy. Krok 6 nie zwiększa liczby dispatchów subagentów ani wywołań WebSearch — to czysta ekstrakcja liczb, które Quant już policzył i wydrukował w `QUANT_REPORT`.
 
 ---
 

@@ -51,7 +51,23 @@ EDGE_MARGIN = 2.0  # pp - ponizej tego traktujemy edge jako "w okolicach benchma
 
 TIMING_DAYS = {"TERAZ": 28, "WKROTCE": 91, "ODLEGLY": 182}
 BOUGHT_OUTCOMES = {"BOUGHT_FULL", "BOUGHT_HALF"}
-FILTERED_OUTCOMES = {"REJECTED_ALPHA", "AUDITOR_VETO", "AUDITOR_HOLD", "RESERVE_ALPHA"}
+# FILTERED_OUTCOMES = kazdy ticker, ktory NIE zostal kupiony - obejmuje zarowno
+# odrzucenia PO bramce Quanta (REJECTED_ALPHA/AUDITOR_*/RESERVE_ALPHA, tickery
+# ktore mialy ZIELONE_SWIATLO: TAK i odpadly u Alphy/Auditora/Directora) jak i
+# QUANT_REJECTED_* (tickery odrzucone przez sama bramke techniczna Quanta -
+# SMA50/SMA200/RSI - zanim Alpha je w ogole zobaczyla). Trzymane w jednej grupie
+# (nie osobno per filtr) - sekcja "Filtr Alpha/Auditor" porownuje po prostu
+# KUPIONE vs WSZYSTKO INNE.
+FILTERED_OUTCOMES = {
+    "REJECTED_ALPHA",
+    "AUDITOR_VETO",
+    "AUDITOR_HOLD",
+    "RESERVE_ALPHA",
+    "QUANT_REJECTED_SMA50",
+    "QUANT_REJECTED_SMA200",
+    "QUANT_REJECTED_RSI",
+    "QUANT_REJECTED_ERROR",
+}
 RESOLVED_STATUSES = ("HIT_TARGET", "STOPPED")
 
 
@@ -244,10 +260,10 @@ def section_summary(rec_rows, closed_rows, scout_rows, spy_available):
                     ("🔴 poniżej SPY", "🟡 w okolicach SPY", "🟢 bije SPY")),
         ),
         (
-            "Filtr Alpha/Auditor",
+            "Filtr pipeline'u (Quant/Alpha/Auditor)",
             f"kupione − odrzucone: {fmt_pp(filter_delta)}" if filter_delta is not None
             else "brak danych do porównania",
-            "dodatnia delta = filtr trafnie odsiewa słabsze setupy",
+            "dodatnia delta = filtr (na dowolnym etapie) trafnie odsiewa słabsze setupy",
             verdict(filter_delta, (b_stats["n_edge"] + f_stats["n_edge"]) < 8, (-EDGE_MARGIN, EDGE_MARGIN),
                     ("🔴 filtr kosztuje edge", "🟡 neutralny", "🟢 filtr dodaje wartość")),
         ),
@@ -306,8 +322,9 @@ def section_funnel(scout_rows, rec_rows):
     )
     if conv_rate is not None:
         lines.append(
-            f"\nZ tego **{len(rec_tickers)}** unikalnych ({conv_rate:.0f}%) przeszło bramkę Quanta "
-            f"i trafiło do `recommendations.csv`:\n"
+            f"\nZ tego **{len(rec_tickers)}** unikalnych ({conv_rate:.0f}%) zostało ocenionych "
+            f"przez Quanta i trafiło do `recommendations.csv` — niezależnie od wyniku bramki "
+            f"(`ZIELONE_SWIATLO: TAK` i `NIE` oba się logują):\n"
         )
     lines.append("| Outcome | n |")
     lines.append("|---|---|")
@@ -318,12 +335,16 @@ def section_funnel(scout_rows, rec_rows):
 
 
 def section_filter_value(rec_rows, spy_available):
-    lines = ["## 2. Rekomendacje vs SPY — czy filtr Alpha/Auditor dodaje wartość?\n"]
+    lines = ["## 2. Rekomendacje vs SPY — czy filtr pipeline'u dodaje wartość?\n"]
     lines.append(
-        "Weekly Tracker aktualizuje cenę dla WSZYSTKICH tickerów po bramce Quanta, nie "
-        "tylko kupionych — więc można porównać zwrot (i edge vs SPY w tym samym oknie "
-        "czasowym) tickerów faktycznie kupionych względem tych odrzuconych/wstrzymanych "
-        "przez Alphę/Auditora.\n"
+        "Weekly Tracker aktualizuje cenę dla WSZYSTKICH tickerów w logu, nie tylko "
+        "kupionych — więc można porównać zwrot (i edge vs SPY w tym samym oknie "
+        "czasowym) tickerów faktycznie kupionych względem wszystkich odrzuconych na "
+        "dowolnym etapie: technicznie przez Quanta (SMA50/SMA200/RSI, `QUANT_REJECTED_*`) "
+        "albo później przez Alphę/Auditora (`REJECTED_ALPHA`/`AUDITOR_VETO`/"
+        "`AUDITOR_HOLD`/`RESERVE_ALPHA`). Grupa ODRZUCONE/WSTRZYMANE poniżej łączy oba "
+        "źródła — to jeden filtr pipeline'u widziany z zewnątrz, nie próba rozdzielenia "
+        "wkładu każdego etapu z osobna.\n"
     )
 
     bought = [r for r in rec_rows if (r.get("outcome") or "").strip() in BOUGHT_OUTCOMES]
@@ -351,9 +372,10 @@ def section_filter_value(rec_rows, spy_available):
     lines.append("")
     n_total = len(bought) + len(filtered)
     lines.append(
-        "**Interpretacja:** jeśli KUPIONE bije ODRZUCONE — filtr Alpha/Auditor łapie "
-        "gorsze setupy zanim wejdziemy. Jeśli odwrotnie — filtr odcina zwycięzców "
-        "(rola analogiczna do placebo w `backtest/`: to negative control, nie wyrok)."
+        "**Interpretacja:** jeśli KUPIONE bije ODRZUCONE — filtr pipeline'u (Quant + "
+        "Alpha/Auditor razem) łapie gorsze setupy zanim wejdziemy. Jeśli odwrotnie — "
+        "filtr odcina zwycięzców (rola analogiczna do placebo w `backtest/`: to "
+        "negative control, nie wyrok)."
         f"{n_flag(n_total)}"
     )
     lines.append("")
