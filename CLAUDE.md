@@ -45,8 +45,8 @@ Dwuwarstwowy przepływ, cron czwartek 08:00 UTC + `workflow_dispatch`:
 ### 4. Performance Digest (`skills/performance-digest/`, `.github/workflows/performance-digest.yml`)
 - Deterministyczny (Python, bez LLM) miesięczny audyt skuteczności — Weekly Tracker aktualizuje status per wiersz, ale nic nie agreguje w czasie; to robi ten skrypt.
 - Cron: 1. dzień miesiąca 08:00 UTC + manualny `workflow_dispatch`. Bez `claude-code-action` → bez OIDC, nie zużywa limitu Pro.
-- Liczy z `recommendations.csv` / `closed_positions.csv` / `scout_tickers.csv`: lejek Scout→Quant→Alpha→Auditor→Director, **czy filtr Alpha/Auditor dodaje wartość** (kupione vs odrzucone/wstrzymane tickery — Tracker śledzi cenę dla obu grup), kalibrację `timing_bucket`, win rate Position Auditora per bucket/powód zamknięcia, nowość/powtarzalność Scouta.
-- Sekcje z n < 20 są explicite oznaczane jako orientacyjne — to nie test setupu jak `backtest/` (tam próg PASS wymagał n≥50 + placebo), tylko log jednego działającego pipeline'u.
+- Liczy z `recommendations.csv` / `closed_positions.csv` / `scout_tickers.csv`: lejek Scout→Quant→Alpha→Auditor→Director, **czy filtr Alpha/Auditor dodaje wartość** (kupione vs odrzucone/wstrzymane tickery, liczone jako edge vs SPY w tym samym oknie run_date→last_checked_date — Tracker śledzi cenę dla obu grup), kalibrację `timing_bucket`, win rate Position Auditora per bucket/powód zamknięcia, nowość/powtarzalność Scouta.
+- Raport otwiera sekcja Podsumowanie: jedna tabela z werdyktem 🟢/🟡/🔴/⚪ per obszar (⚪ = za mało danych, nie "neutralnie"). Sekcje/wiersze z n < 20 są explicite oznaczane jako orientacyjne — to nie test setupu jak `backtest/` (tam próg PASS wymagał n≥50 + placebo), tylko log jednego działającego pipeline'u.
 - Wynik: `reports/performance-digest-<data>.md` (commitowany) + mail.
 
 ## Dokumentacja — pełne dokumenty referencyjne

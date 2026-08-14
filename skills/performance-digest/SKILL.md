@@ -1,9 +1,8 @@
 # Performance Digest — miesięczny audyt skuteczności
 
-Deterministyczny (Python, bez LLM) skrypt, który **nie liczy nic samodzielnie
-z rynku** — czyta trzy logi, które oba pipeline'y (`gem-inwestycyjny` i
-`gem-position-auditor`) już piszą, i liczy z nich metryki, których żaden z
-istniejących przepływów nie liczy dziś:
+Deterministyczny (Python, bez LLM) skrypt, który czyta trzy logi, które oba
+pipeline'y (`gem-inwestycyjny` i `gem-position-auditor`) już piszą, i liczy
+z nich metryki, których żaden z istniejących przepływów nie liczy dziś:
 
 - `.claude/skills/gem-inwestycyjny/history/recommendations.csv` — lejek
   Scout→Quant→Alpha→Auditor→Director, win rate, kalibracja `timing_bucket`,
@@ -15,12 +14,33 @@ istniejących przepływów nie liczy dziś:
 - `.claude/skills/gem-inwestycyjny/history/scout_tickers.csv` — nowość i
   powtarzalność propozycji Scouta, konwersja Scout→Quant.
 
+Raport otwiera się sekcją **Podsumowanie** — jedna tabela, jeden wiersz per
+obszar (rekomendacje, filtr Alpha/Auditor, timing, Position Auditor, Scout),
+z werdyktem 🟢/🟡/🔴/⚪ dla każdego. ⚪ oznacza wprost "za mało danych", nigdy
+nie udaje pewności, której n nie uzasadnia. Reszta raportu (sekcje 1–6) to
+rozwinięcie każdego wiersza podsumowania w tabelę źródłową.
+
+## Benchmark: SPY, nie surowy zwrot
+Sekcja 2 (i wiersz "Kupione rekomendacje" w Podsumowaniu) liczy **edge vs
+SPY**, nie sam zwrot pozycji — ten sam mechanizm co `backtest/`: zwrot SPY w
+DOKŁADNIE tym samym oknie (`run_date` → `last_checked_date`), więc liczy się
+tylko to, co pipeline dodał ponad rynek, nie ogólną hossę/bessę. Wymaga
+`yfinance`/`pandas` (już w `requirements.txt`) i sieci; jeśli którekolwiek
+niedostępne, skrypt **nie failuje** — łapie wyjątek, drukuje ostrzeżenie na
+górze raportu i pokazuje surowy zwrot zamiast edge.
+
+`closed_positions.csv` (Position Auditor) **nie ma** kolumny z datą otwarcia
+pozycji, więc dla tej sekcji nie da się dopasować okna do SPY — sekcja 5
+pokazuje surowy PnL z jawną adnotacją, dlaczego nie ma tam edge.
+
 ## Uruchomienie lokalne
 ```bash
+pip install yfinance pandas  # jesli jeszcze nie zainstalowane
 python skills/performance-digest/performance_digest.py > report.md
 ```
 Opcjonalne flagi `--recommendations` / `--closed` / `--scout` do zmiany ścieżek
-źródłowych (domyślne jak wyżej).
+źródłowych (domyślne jak wyżej). Bez `yfinance`/sieci skrypt nadal działa —
+patrz sekcja Benchmark wyżej.
 
 ## Harmonogram
 `.github/workflows/performance-digest.yml` — cron 1. dzień miesiąca, 08:00 UTC,
