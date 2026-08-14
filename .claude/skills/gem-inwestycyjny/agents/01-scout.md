@@ -54,6 +54,7 @@ Odczytaj `shared/nomenclature.md` — tam są mapowania XTB ↔ Yahoo. **Mandat 
 - Fokus: Mid/Large Cap, główne parkiety
 - **Mandat geograficzny: WYŁĄCZNIE USA i Europa. Max 50% propozycji z USA — min. 50% musi być z giełd europejskich.**
 - **Wykluczone: rynek japoński (TSE), Hong Kong, Chiny, cała Azja, emerging markets poza Europą**
+- **Dostępność na XTB (real stocks, nie CFD) — tylko 16-17 krajów, patrz `shared/nomenclature.md`.** Kraj z mandatu ≠ gwarancja kupowalności: **AIM (londyński junior market) NIE jest pokryty** mimo że "wygląda" jak `TICK.UK` (przypadek TUN.L/Tungsten West, 14.08.2026 — zero wyników w wyszukiwarce xtb.com). Ten sam problem dotyczy **NYSE American/AMEX** w USA. Dla każdego kandydata z UK ustal Main Market vs AIM; dla US small-cap ustal NYSE/NASDAQ vs NYSE American. Jeśli junior/drugorzędny segment — albo zweryfikuj dostępność na `xtb.com/pl/specyfikacja-instrumentow`, albo odrzuć/oznacz ryzyko w TEZIE zamiast cichego założenia że jest kupowalny.
 - Dla SMID-cap (<$10B mkt cap) — sprawdź insider buying w 90 dniach (query: `"[TICKER] insider buying form 4 2026"` lub odpowiednik dla rynku). Brak ≠ deal-breaker, ALE obecność = bonus +1 do konwikcji.
 
 **Filtr Crowded Trade (anty-konsensus):**
