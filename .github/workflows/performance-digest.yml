@@ -1,0 +1,51 @@
+name: monthly-performance-digest
+on:
+  schedule:
+    - cron: '0 8 1 * *'      # 1. dzien miesiaca, 08:00 UTC (~10:00 PL)
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+
+      - name: set report path
+        run: echo "REPORT_FILE=reports/performance-digest-$(date +%F).md" >> "$GITHUB_ENV"
+
+      - name: ensure reports dir
+        run: mkdir -p reports
+
+      - name: run performance digest
+        run: python skills/performance-digest/performance_digest.py | tee "$REPORT_FILE"
+
+      - name: commit report
+        if: always()
+        run: |
+          git config user.name "gem-bot"
+          git config user.email "gem-bot@users.noreply.github.com"
+          [ -f "$REPORT_FILE" ] && git add "$REPORT_FILE"
+          git commit -m "performance digest: $(date +%F) (run ${{ github.run_id }})" || echo "no changes"
+          git push
+
+      - name: set email subject date
+        if: always()
+        run: echo "MAIL_DATE=$(date +%d.%m.%Y)" >> "$GITHUB_ENV"
+
+      - name: email report
+        if: always()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.GMAIL_USERNAME }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          from: Performance Digest
+          to: ${{ secrets.MAIL_TO }}
+          subject: "Performance Digest — ${{ env.MAIL_DATE }}"
+          html_body: file://${{ env.REPORT_FILE }}
+          convert_markdown: true

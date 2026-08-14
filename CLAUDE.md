@@ -42,6 +42,13 @@ Dwuwarstwowy przepływ, cron czwartek 08:00 UTC + `workflow_dispatch`:
 - Pobiera aktualne ceny (`quant_scanner.py`), flipuje `status` na `HIT_TARGET`/`STOPPED` (ustawia `date_resolved` raz, przy pierwszym rozstrzygnięciu), liczy `pct_to_target`.
 - Wynik: `reports/tracker-<data>.md` + mail, commit zaktualizowanego CSV do repo. Te same fixy (OIDC `id-token: write`, `git remote set-url` przed push) co w `gem-pipeline.yml`.
 
+### 4. Performance Digest (`skills/performance-digest/`, `.github/workflows/performance-digest.yml`)
+- Deterministyczny (Python, bez LLM) miesięczny audyt skuteczności — Weekly Tracker aktualizuje status per wiersz, ale nic nie agreguje w czasie; to robi ten skrypt.
+- Cron: 1. dzień miesiąca 08:00 UTC + manualny `workflow_dispatch`. Bez `claude-code-action` → bez OIDC, nie zużywa limitu Pro.
+- Liczy z `recommendations.csv` / `closed_positions.csv` / `scout_tickers.csv`: lejek Scout→Quant→Alpha→Auditor→Director, **czy filtr Alpha/Auditor dodaje wartość** (kupione vs odrzucone/wstrzymane tickery — Tracker śledzi cenę dla obu grup), kalibrację `timing_bucket`, win rate Position Auditora per bucket/powód zamknięcia, nowość/powtarzalność Scouta.
+- Sekcje z n < 20 są explicite oznaczane jako orientacyjne — to nie test setupu jak `backtest/` (tam próg PASS wymagał n≥50 + placebo), tylko log jednego działającego pipeline'u.
+- Wynik: `reports/performance-digest-<data>.md` (commitowany) + mail.
+
 ## Dokumentacja — pełne dokumenty referencyjne
 
 Ten plik (CLAUDE.md) jest zawsze ładowany do kontekstu — ma zostać krótki. Poniżej katalog dokumentów-dzieci: każdy odpowiada za jeden temat, otwieraj tylko ten, którego aktualnie potrzebujesz.
@@ -51,6 +58,7 @@ Ten plik (CLAUDE.md) jest zawsze ładowany do kontekstu — ma zostać krótki. 
 - [`.claude/skills/gem-inwestycyjny/SKILL.md`](.claude/skills/gem-inwestycyjny/SKILL.md) — orchestrator pipeline'u 5 subagentów (Scout→Director) + kontrakt synchroniczności dispatchu.
 - [`.claude/skills/gem-inwestycyjny/PLAN_recommendation_tracking.md`](.claude/skills/gem-inwestycyjny/PLAN_recommendation_tracking.md) — schemat CSV i zasady logowania rekomendacji BUY do `history/recommendations.csv` (krok 6, zaimplementowany — patrz sekcja 2 wyżej).
 - [`backtest/README.md`](backtest/README.md) — projekt badawczy "czy setup wejściowy daje edge nad SPY": metodologia, wynik (Grupy 1–3: FAIL), i stamtąd dalsze linki do `HANDOFF_pead_mwig40.md` (nowy, wciąż otwarty wątek PEAD/mWIG40) i notatek walidacyjnych grup 2–3.
+- [`skills/performance-digest/SKILL.md`](skills/performance-digest/SKILL.md) — co dokładnie liczy miesięczny audyt skuteczności (sekcja 4 wyżej), dlaczego miesięcznie nie tygodniowo, i czym różni się od `backtest/`.
 
 Nieobjęte katalogiem (logi, nie dokumentacja referencyjna): `reports/*.md` (wygenerowane raporty pipeline'u/trackera per data) i `session-handoffs/*.md` (zapiski z sesji). Przeglądaj je bezpośrednio, gdy potrzebujesz historii konkretnego dnia.
 
