@@ -1,0 +1,5 @@
+[
+  {"xtb": "AAPL.US", "yahoo": "AAPL", "avg_cost": 180.00},
+  {"xtb": "MSFT.US", "yahoo": "MSFT", "avg_cost": 350.00},
+  {"xtb": "SAP.DE",  "yahoo": "SAP.DE", "avg_cost": 150.00}
+]

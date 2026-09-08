@@ -4,7 +4,7 @@ on:
     - cron: '0 8 * * 5'      # piatek 08:00 UTC (~10:00 PL)
   workflow_dispatch:
 permissions:
-  contents: write
+  contents: read
   id-token: write
 jobs:
   tracker:
@@ -16,8 +16,31 @@ jobs:
       - name: set report path
         run: echo "REPORT_FILE=reports/tracker-$(date +%F).md" >> "$GITHUB_ENV"
 
-      - name: ensure reports dir
-        run: mkdir -p reports
+      - name: mint data-repo token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.DATA_APP_CLIENT_ID }}
+          private-key: ${{ secrets.DATA_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: investing-partner-data
+
+      - name: checkout private data repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/investing-partner-data
+          token: ${{ steps.app-token.outputs.token }}
+          path: data
+
+      - name: link data repo into place
+        run: |
+          mkdir -p data/reports
+          mkdir -p data/.claude/skills/gem-inwestycyjny/tracker-runbook/full
+          [ -f data/closed_positions.csv ] || touch data/closed_positions.csv
+          ln -sfn "$(pwd)/data/reports" reports
+          ln -sfn "$(pwd)/data/.claude/skills/gem-inwestycyjny/history" .claude/skills/gem-inwestycyjny/history
+          ln -sfn "$(pwd)/data/.claude/skills/gem-inwestycyjny/tracker-runbook" .claude/skills/gem-inwestycyjny/tracker-runbook
+          ln -sf "$(pwd)/data/closed_positions.csv" closed_positions.csv
 
       - name: run Weekly Tracker (Agent 06)
         uses: anthropics/claude-code-action@v1
@@ -47,7 +70,7 @@ jobs:
       - name: capture run log
         if: always()
         run: |
-          RUNBOOK_DIR=.claude/skills/gem-inwestycyjny/history/tracker-runbook
+          RUNBOOK_DIR=.claude/skills/gem-inwestycyjny/tracker-runbook
           FULL_DIR="$RUNBOOK_DIR/full"
           SUMMARY_FILE="$RUNBOOK_DIR/summary.jsonl"
           mkdir -p "$FULL_DIR"
@@ -128,15 +151,14 @@ jobs:
 
       - name: commit tracker update
         if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
+          cd data
           git config user.name "gem-bot"
           git config user.email "gem-bot@users.noreply.github.com"
-          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          git remote set-url origin "https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/${{ github.repository_owner }}/investing-partner-data.git"
           [ -f "$REPORT_FILE" ] && git add "$REPORT_FILE"
           [ -f .claude/skills/gem-inwestycyjny/history/recommendations.csv ] && git add .claude/skills/gem-inwestycyjny/history/recommendations.csv
-          [ -d .claude/skills/gem-inwestycyjny/history/tracker-runbook ] && git add .claude/skills/gem-inwestycyjny/history/tracker-runbook
+          [ -d .claude/skills/gem-inwestycyjny/tracker-runbook ] && git add .claude/skills/gem-inwestycyjny/tracker-runbook
           git commit -m "weekly tracker: $(date +%F) (run ${{ github.run_id }})" || echo "no changes"
           git push
 

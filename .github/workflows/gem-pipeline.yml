@@ -10,7 +10,7 @@ on:
         description: 'Preset jakosci: optimal | lean | max'
         default: 'optimal'
 permissions:
-  contents: write
+  contents: read
   id-token: write
 jobs:
   gem:
@@ -22,8 +22,35 @@ jobs:
       - name: set report path
         run: echo "REPORT_FILE=reports/gem-$(date +%F).md" >> "$GITHUB_ENV"
 
-      - name: ensure reports dir
-        run: mkdir -p reports
+      - name: mint data-repo token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.DATA_APP_CLIENT_ID }}
+          private-key: ${{ secrets.DATA_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: investing-partner-data
+
+      - name: checkout private data repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/investing-partner-data
+          token: ${{ steps.app-token.outputs.token }}
+          path: data
+
+      - name: link data repo into place
+        run: |
+          # Every path the pipeline/skill code touches (history/, reports/,
+          # closed_positions.csv) lives in the private investing-partner-data
+          # repo (checked out to ./data). Symlink it to the paths SKILL.md and
+          # the agents already expect at repo root — no prompt/code changes
+          # needed below this step.
+          mkdir -p data/reports
+          mkdir -p data/.claude/skills/gem-inwestycyjny/history/runbook/full
+          [ -f data/closed_positions.csv ] || touch data/closed_positions.csv
+          ln -sfn "$(pwd)/data/reports" reports
+          ln -sfn "$(pwd)/data/.claude/skills/gem-inwestycyjny/history" .claude/skills/gem-inwestycyjny/history
+          ln -sf "$(pwd)/data/closed_positions.csv" closed_positions.csv
 
       - name: run gem-inwestycyjny pipeline
         uses: anthropics/claude-code-action@v1
@@ -168,9 +195,9 @@ jobs:
           # dispatching any subagents — leaving the pre-existing file
           # untouched. It still contains the right keywords (from the
           # earlier run), so the keyword check alone would pass. Catch this
-          # by requiring the file to actually differ from the committed
-          # HEAD state (checkout gives us that baseline).
-          REPORT_CHANGED=$(git status --porcelain -- "$REPORT_FILE")
+          # by requiring the file to actually differ from the data repo's
+          # committed HEAD state.
+          REPORT_CHANGED=$(cd data && git status --porcelain -- "$REPORT_FILE")
           if [ -s "$REPORT_FILE" ] && grep -qiE "Karta Zlece|DIRECTOR|Gem Inwestycyjny" "$REPORT_FILE" && [ -n "$REPORT_CHANGED" ]; then
             echo "REPORT_OK=true" >> "$GITHUB_ENV"
             echo "Report present, non-trivial, and changed this run: $REPORT_FILE"
@@ -184,13 +211,13 @@ jobs:
 
       - name: commit report
         if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
+          cd data
           git config user.name "gem-bot"
           git config user.email "gem-bot@users.noreply.github.com"
-          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          git remote set-url origin "https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/${{ github.repository_owner }}/investing-partner-data.git"
           [ -f "$REPORT_FILE" ] && git add "$REPORT_FILE"
+          [ -f closed_positions.csv ] && git add closed_positions.csv
           [ -d .claude/skills/gem-inwestycyjny/history ] && git add .claude/skills/gem-inwestycyjny/history
           git commit -m "gem pipeline: $(date +%F) (run ${{ github.run_id }})" || echo "no changes"
           git push

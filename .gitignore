@@ -2,3 +2,21 @@ __pycache__/
 *.pyc
 .venv/
 *.log
+
+# real portfolio state lives in the private investing-partner-data repo, checked
+# out to ./data/ in CI and symlinked from these paths — never commit real copies
+# of these here, including from a local test run.
+/data/
+holdings.json
+stops_state.json
+closed_positions.csv
+audit_report.html
+audit_report.txt
+reentry_candidates.json
+reentry_report.html
+reentry_report.txt
+reentry_narrative.md
+/reports/
+/.claude/skills/gem-inwestycyjny/history/
+/skills/gem-position-auditor/history/
+report.md

@@ -4,6 +4,16 @@ A set of independently scheduled automation and research tools for a personal eq
 
 **Personal tooling, not investment advice.** No audited track record, no forward-looking performance claims. `backtest/` and `skills/performance-digest/` exist specifically to check the tools' own numbers against reality, including the possibility that they add no value — see [Backtest](#backtest--does-any-entry-setup-beat-spy) below for a case where that's exactly what happened.
 
+**About this repo's history.** This is the public half of a two-repo split: the code here (skills,
+agents, workflows) is real and runs on a live schedule, but it reads and writes actual portfolio
+state — holdings, stops, closed positions, recommendation outcomes — from a private sibling repo,
+`investing-partner-data`, that isn't published. This repo's commit history is an *extracted* copy
+of the original single-repo development history (via `git filter-repo`, keeping only code paths),
+with the real commit dates and messages preserved — it's not a fresh dump, but it's also not the
+literal, unedited original history; two commit messages that happened to quote real position
+numbers were redacted in the process. See [`CLAUDE.md`](CLAUDE.md) for exactly how the split
+works.
+
 ## Architecture: deterministic first, LLM only where judgment is needed
 
 Three of the five systems below run on plain Python — no model call, no token cost, no variance between runs. Only the two research/discovery flows that require reading news, weighing catalysts, or drafting an investment thesis reach for an LLM, and one of those (Re-entry Review's narrative layer) only fires when a cheap deterministic gate has already found something worth looking at. This split is deliberate: it's what keeps a project with five scheduled jobs cheap enough to run against a personal Claude Pro subscription instead of a metered API budget, and it keeps the parts that must be exactly reproducible (stop-loss math, ledger updates) out of the parts that are allowed to vary.
@@ -65,14 +75,17 @@ This negative result is the point, not a footnote: it's the reason system #3 abo
 
 ## Running things locally
 
-Position Auditor is the simplest entry point:
+Position Auditor is the simplest entry point. This repo doesn't ship a real `holdings.json` (that
+lives in the private data repo) — copy the example to get a working local run against real market
+data for made-up positions:
 
 ```bash
 pip install -r requirements.txt
+cp holdings.json.example holdings.json
 python skills/gem-position-auditor/position_auditor.py holdings.json
 ```
 
-`holdings.json` is a flat array of `{"xtb": "<XTB ticker>", "yahoo": "<Yahoo Finance ticker>", "avg_cost": <number>}` objects — e.g. `{"xtb": "EXAMPLE.US", "yahoo": "EXAMPLE", "avg_cost": 100.00}`. State is written to `stops_state.json`, which must be committed or the week-over-week diff is lost.
+`holdings.json` is a flat array of `{"xtb": "<XTB ticker>", "yahoo": "<Yahoo Finance ticker>", "avg_cost": <number>}` objects. State is written to `stops_state.json` in the same directory — in production that's a symlink into the private data repo (see [`CLAUDE.md`](CLAUDE.md)); locally it's just a plain file, and `holdings.json`/`stops_state.json` are gitignored so a local run never accidentally gets committed here.
 
 The other systems (`skills/performance-digest/performance_digest.py`, `skills/gem-position-auditor/reentry_scanner.py`) are also plain Python scripts and can be run the same way; see each system's own doc below for flags and output paths. The Gem Pipeline's LLM agents are designed to run inside the GitHub Actions workflow, not ad hoc locally.
 

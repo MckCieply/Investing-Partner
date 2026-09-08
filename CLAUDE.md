@@ -1,13 +1,47 @@
 # CLAUDE.md — reguły pracy w tym repo
 
+## To repo jest publiczne — dwurepowa architektura
+
+**`Investing-Partner` (to repo) jest publiczne. Nigdy nie commituj tu prawdziwych danych
+pozycji.** Prawdziwe `holdings.json`, `stops_state.json`, `closed_positions.csv`,
+`audit_report.html/txt`, `.claude/skills/gem-inwestycyjny/history/` (w tym
+`recommendations.csv`) i `reports/` żyją w osobnym **prywatnym** repo
+`MckCieply/investing-partner-data`. Ten kod (skille, agenci, workflowy) jest identyczny w obu —
+publiczny status dotyczy wyłącznie logiki, nie danych.
+
+Mechanizm: każdy workflow w `.github/workflows/` checkoutuje `investing-partner-data` do
+podkatalogu `data/` (token z GitHub App, mintowany per-run przez
+`actions/create-github-app-token` — zobacz [`GITHUB_APP_SETUP.md`](GITHUB_APP_SETUP.md)), po
+czym symlinkuje realne pliki/katalogi (`holdings.json`, `stops_state.json`, `closed_positions.csv`,
+`.claude/skills/gem-inwestycyjny/history/`, `skills/gem-position-auditor/history/`, `reports/`) z
+`data/...` na ich zwykłe względne ścieżki w root repo. **Dzięki temu SKILL.md, pliki agentów i
+skrypty Pythona nie wiedzą o istnieniu drugiego repo** — czytają/piszą dokładnie te same względne
+ścieżki co wcześniej w jednorepowej wersji; symlink robi tłumaczenie. Kroki `commit`/`push` w
+workflowach commitują **do `data/`**, nie do tego repo — ten publiczny checkout nigdy nie ma nic
+do zacommitowania z automatyzacji.
+
+Historia commitów w tym repo jest **wyekstrahowana** z prywatnego repo deweloperskiego (ten sam
+`Investing-Partner`, teraz przemianowany na `investing-partner-data`) przez `git filter-repo`,
+zachowując prawdziwe daty i wiadomości commitów, ale tylko dla ścieżek kodu — pliki danych nigdy
+nie weszły do tej historii. Dwa commit messages i jeden przykład w dokumentacji, które
+przypadkiem cytowały prawdziwe liczby (ceny wejścia/wyjścia), zostały zredagowane
+(`--replace-text`/`--replace-message`) — reszta historii jest dosłowna.
+
 ## Workflow / Git
 
-- **Git = GitHub, zawsze.** Jedyny zdalny remote to `origin` → `MckCieply/Investing-Partner`. Nie ma innych developerów, innych branchy do koordynacji ani PR-ów do recenzji — commituj i pushuj bezpośrednio na `main`, bez pytania o potwierdzenie przy zwykłych zmianach w kodzie/skillach/configu.
+- **Git = GitHub, zawsze.** Dwa repo, jeden zdalny remote każde: to repo → `origin` →
+  `MckCieply/Investing-Partner` (publiczne, kod); `MckCieply/investing-partner-data` (prywatne,
+  dane — osobny checkout w CI, nie remote tego repo). Nie ma innych developerów, innych branchy
+  do koordynacji ani PR-ów do recenzji — commituj i pushuj bezpośrednio na `main`, bez pytania o
+  potwierdzenie przy zwykłych zmianach w kodzie/skillach/configu.
 - **Jestem jedynym programistą.** Nie trzeba ostrzegać przed "nadpisaniem czyjejś pracy" ani proponować PR-flow — to nie ma zastosowania w tym repo.
 - Wyjątek: rzeczy nieodwracalne lub niosące realny koszt (force-push, reset --hard, usuwanie tagów/branchy, zmiany w sekretach/uprawnieniach repo) — o tych nadal pytaj.
 - Commit messages: krótkie, po angielsku, konwencja `type(scope): opis` (np. `fix(gem-pipeline): ...`, `feat: ...`).
+- **Zanim scommitujesz cokolwiek do TEGO repo, sprawdź czy to nie jest dana pozycji/PnL/exit.**
+  Jeśli tak — cel to `investing-partner-data`, nie tutaj. W razie wątpliwości: jeśli plik zawiera
+  prawdziwy ticker + prawdziwą cenę/PnL, należy do prywatnego repo.
 - **Pipeline first.** Jeśli dane zadanie może być wykonane przez GitHub Actions (cron, workflow_dispatch, Python skrypt w CI) — powinno być tam zrobione, nie lokalnie ani ręcznie w sesji. Ręczna praca lokalna to prototyp lub jednorazowy fix; docelowo każde powtarzalne działanie trafia do pipeline'u.
-- **Persistuj dane przedstawione przez użytkownika.** Gdy użytkownik podaje dane (pozycje portfela, ceny wejścia, decyzje o kupnie/sprzedaży, wyniki transakcji) — zanim zakończę pracę z tymi danymi, zweryfikuj czy powinny być zapisane do repo (np. `holdings.json`, `history/recommendations.csv`, `stops_state.json`). Dane prezentowane jako zdjęcie/screenshot traktuj jak dane do wprowadzenia, a nie tylko do przeczytania.
+- **Persistuj dane przedstawione przez użytkownika — ale do `investing-partner-data`, nie tutaj.** Gdy użytkownik podaje dane (pozycje portfela, ceny wejścia, decyzje o kupnie/sprzedaży, wyniki transakcji), zapisuj je w prywatnym repo. Dane prezentowane jako zdjęcie/screenshot traktuj jak dane do wprowadzenia, a nie tylko do przeczytania.
 
 ## Co to za projekt
 
@@ -54,6 +88,7 @@ Dwuwarstwowy przepływ, cron czwartek 08:00 UTC + `workflow_dispatch`:
 Ten plik (CLAUDE.md) jest zawsze ładowany do kontekstu — ma zostać krótki. Poniżej katalog dokumentów-dzieci: każdy odpowiada za jeden temat, otwieraj tylko ten, którego aktualnie potrzebujesz.
 
 - [`README.md`](README.md) — szybki start Position Auditora (instalacja, lokalny run, edycja `holdings.json`).
+- [`GITHUB_APP_SETUP.md`](GITHUB_APP_SETUP.md) — jak skonfigurować GitHub App łączący to repo z `investing-partner-data` (jednorazowy setup, ręczne kroki w UI GitHuba).
 - [`skills/gem-position-auditor/SKILL.md`](skills/gem-position-auditor/SKILL.md) — pełna logika Agenta 6: dobór metody stopa per bucket (ATR% vs SMA/RSI), transze, histereza, format diffu tygodniowego.
 - [`.claude/skills/gem-inwestycyjny/SKILL.md`](.claude/skills/gem-inwestycyjny/SKILL.md) — orchestrator pipeline'u 5 subagentów (Scout→Director) + kontrakt synchroniczności dispatchu.
 - [`.claude/skills/gem-inwestycyjny/PLAN_recommendation_tracking.md`](.claude/skills/gem-inwestycyjny/PLAN_recommendation_tracking.md) — schemat CSV i zasady logowania rekomendacji BUY do `history/recommendations.csv` (krok 6, zaimplementowany — patrz sekcja 2 wyżej).
@@ -71,4 +106,7 @@ Nieobjęte katalogiem (logi, nie dokumentacja referencyjna): `reports/*.md` (wyg
 - Lokalny npm/Node na maszynie użytkownika był zepsuty (minizlib/Node 24 incompatibility) — Claude Code CLI instalujemy natywnym installerem (`irm https://claude.ai/install.ps1 | iex`), nie przez npm.
 - **NYSE American (dawny AMEX) nie jest w pełni pokryte przez XTB** — małe spółki z tej giełdy (np. MPTI) często są niedostępne mimo że formalnie to regulowana giełda USA. Scout powinien preferować NYSE i NASDAQ dla tickerów US; dla NYSE American wymagać weryfikacji dostępności zanim ticker trafi do rekomendacji.
 - **XTB oferuje akcje rzeczywiste (real stocks, nie CFD) tylko z 16-17 krajów** — zweryfikowano 15.08.2026 przez filtr krajów na `xtb.com/pl/specyfikacja-instrumentow` (zakładka "Akcje"): Belgia, Czechy, Dania, Finlandia, Francja, Hiszpania, Holandia, Niemcy, Norwegia, Polska, Portugalia, Stany Zjednoczone, Szwajcaria, Szwecja, Wielka Brytania, Wielka Brytania (IOB USD), Włochy. Pełny kontekst i mechanizm weryfikacji: [nomenclature.md](.claude/skills/gem-inwestycyjny/shared/nomenclature.md). **AIM (londyński junior market) NIE jest osobno pokryty** — filtr ma tylko jedną pozycję "Wielka Brytania" (LSE Main Market). Przypadek testowy: Scout zarekomendował `TUN.UK` (Tungsten West Plc, AIM) 14.08.2026 — ticker wyglądał poprawnie wg konwencji `TICK.UK`, ale wyszukiwarka na xtb.com zwróciła zero wyników. Ten sam mechanizm ryzyka co NYSE American powyżej (junior segment głównej giełdy) — Scout ma teraz w `01-scout.md` wymóg weryfikacji dla obu przypadków.
-- Manualny re-run `gem-pipeline.yml` tego samego dnia (np. inny `--quality`) może się "udać" bez wykonania żadnej pracy: orchestrator widzi, że `reports/gem-<data>.md` już istnieje z wcześniejszego runu i kończy turę w ~5 turns/20s bez dispatchu Scout→Director, zostawiając stary plik nietknięty — `verify report produced` przechodził, bo sprawdzał tylko obecność/keywords w pliku, nie to, czy ten konkretny run go zmienił. Fix: SKILL.md ma teraz explicit zakaz pomijania pipeline'u z tego powodu + workflow dodatkowo wymaga `git status --porcelain` na pliku raportu (musi się różnić od HEAD).
+- Manualny re-run `gem-pipeline.yml` tego samego dnia (np. inny `--quality`) może się "udać" bez wykonania żadnej pracy: orchestrator widzi, że `reports/gem-<data>.md` już istnieje z wcześniejszego runu i kończy turę w ~5 turns/20s bez dispatchu Scout→Director, zostawiając stary plik nietknięty — `verify report produced` przechodził, bo sprawdzał tylko obecność/keywords w pliku, nie to, czy ten konkretny run go zmienił. Fix: SKILL.md ma teraz explicit zakaz pomijania pipeline'u z tego powodu + workflow dodatkowo wymaga `git status --porcelain` na pliku raportu (musi się różnić od HEAD) — **uwaga: to sprawdzenie musi teraz biec wewnątrz `data/` (`cd data && git status --porcelain -- "$REPORT_FILE"`), nie w tym repo, bo raport fizycznie żyje w `investing-partner-data`.**
+- **Dwa repo w jednym jobie = dwa oddzielne `git remote set-url` przed push.** `claude-code-action@v1` podstawia własny credential helper na runnerze (patrz punkt wyżej) — dotyczy to całego runnera, nie tylko checkoutu, w którym action się wykonał. Fix jest identyczny jak dla `origin`: embedded token w URL (`https://x-access-token:$TOKEN@github.com/...`) bije każdy credential helper, więc krok commitujący do `data/` robi swój własny `git remote set-url` z tokenem z GitHub App, osobno od tego, co dzieje się w root repo.
+- `actions/checkout@v4` z `repository:`/`token:`/`path:` na drugie, prywatne repo działa bez konfliktu z pierwszym (domyślnym) checkoutem — muszą tylko mieć różne `path:`. Domyślny `fetch-depth: 1` (shallow) wystarcza — nie potrzeba pełnej historii, żeby czytać/nadpisywać stan i pushować nowy commit na czubek.
+- GitHub App installation token (`actions/create-github-app-token`) wygasa po godzinie i jest mintowany od nowa przy każdym runie — nie ma czego "rotować" ręcznie poza samym kluczem prywatnym Appki (patrz `GITHUB_APP_SETUP.md`). To świadomy wybór nad fine-grained PAT: PAT wiąże się z kontem osobistym i wygasa max po 366 dniach, co przy czterech niezależnych cronach oznacza ciche, niezauważone padanie pusha, dopóki ktoś nie zauważy braku maila.

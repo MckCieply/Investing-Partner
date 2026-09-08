@@ -4,7 +4,7 @@ on:
     - cron: '0 7 * * 0'      # niedziela 07:00 UTC (~09:00 PL latem)
   workflow_dispatch:          # reczne odpalenie z zakladki Actions
 permissions:
-  contents: write
+  contents: read
 jobs:
   audit:
     runs-on: ubuntu-latest
@@ -13,18 +13,47 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: pip install -r requirements.txt
+
+      - name: mint data-repo token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.DATA_APP_CLIENT_ID }}
+          private-key: ${{ secrets.DATA_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: investing-partner-data
+
+      - name: checkout private data repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/investing-partner-data
+          token: ${{ steps.app-token.outputs.token }}
+          path: data
+
+      - name: link data repo into place
+        run: |
+          # holdings.json/stops_state.json/etc. live in the private investing-partner-data
+          # repo (checked out to ./data). Symlink them to the paths the scripts already
+          # expect at repo root, so nothing below this step needs a code change.
+          mkdir -p data/skills/gem-position-auditor/history/runbook
+          ln -sf "$(pwd)/data/holdings.json" holdings.json
+          ln -sf "$(pwd)/data/stops_state.json" stops_state.json
+          ln -sf "$(pwd)/data/closed_positions.csv" closed_positions.csv
+          ln -sf "$(pwd)/data/audit_report.html" audit_report.html
+          ln -sf "$(pwd)/data/audit_report.txt" audit_report.txt
+          ln -sfn "$(pwd)/data/skills/gem-position-auditor/history" skills/gem-position-auditor/history
+
       - name: run position auditor
         run: python skills/gem-position-auditor/position_auditor.py holdings.json | tee audit_report.txt
 
       - name: capture run log
         if: always()
         run: |
-          RUNBOOK_DIR=skills/gem-position-auditor/history/runbook
-          mkdir -p "$RUNBOOK_DIR"
+          RUNBOOK_DIR=data/skills/gem-position-auditor/history/runbook
           DATE=$(date +%F)
           RUN_FILE="$RUNBOOK_DIR/run-${{ github.run_id }}-$DATE.txt"
-          if [ -f audit_report.txt ]; then
-            cp audit_report.txt "$RUN_FILE"
+          if [ -f data/audit_report.txt ]; then
+            cp data/audit_report.txt "$RUN_FILE"
           else
             echo "audit_report.txt not found — position_auditor.py likely failed before producing output" > "$RUN_FILE"
           fi
@@ -34,8 +63,10 @@ jobs:
       - name: commit state
         if: always()
         run: |
+          cd data
           git config user.name "gem-bot"
           git config user.email "gem-bot@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/${{ github.repository_owner }}/investing-partner-data.git"
           [ -f stops_state.json ] && git add stops_state.json
           [ -f closed_positions.csv ] && git add closed_positions.csv
           [ -f audit_report.txt ] && git add audit_report.txt
@@ -57,4 +88,4 @@ jobs:
           from: Gem Position Auditor
           to: ${{ secrets.MAIL_TO }}
           subject: "Position Audit ${{ env.REPORT_DATE }}"
-          html_body: file://audit_report.html
+          html_body: file://data/audit_report.html

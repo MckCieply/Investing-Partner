@@ -4,7 +4,7 @@ on:
     - cron: '0 8 1 * *'      # 1. dzien miesiaca, 08:00 UTC (~10:00 PL)
   workflow_dispatch:
 permissions:
-  contents: write
+  contents: read
 jobs:
   digest:
     runs-on: ubuntu-latest
@@ -17,17 +17,45 @@ jobs:
       - name: set report path
         run: echo "REPORT_FILE=reports/performance-digest-$(date +%F).md" >> "$GITHUB_ENV"
 
-      - name: ensure reports dir
-        run: mkdir -p reports
+      - name: mint data-repo token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.DATA_APP_CLIENT_ID }}
+          private-key: ${{ secrets.DATA_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: investing-partner-data
+
+      - name: checkout private data repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/investing-partner-data
+          token: ${{ steps.app-token.outputs.token }}
+          path: data
+
+      - name: link data repo into place
+        run: |
+          mkdir -p data/reports
+          ln -sfn "$(pwd)/data/reports" reports
+          ln -sfn "$(pwd)/data/.claude/skills/gem-inwestycyjny/history" .claude/skills/gem-inwestycyjny/history
+          ln -sf "$(pwd)/data/closed_positions.csv" closed_positions.csv
 
       - name: run performance digest
-        run: python skills/performance-digest/performance_digest.py | tee "$REPORT_FILE"
+        run: |
+          pip install yfinance pandas
+          python skills/performance-digest/performance_digest.py \
+            --recommendations .claude/skills/gem-inwestycyjny/history/recommendations.csv \
+            --closed closed_positions.csv \
+            --scout .claude/skills/gem-inwestycyjny/history/scout_tickers.csv \
+            | tee "$REPORT_FILE"
 
       - name: commit report
         if: always()
         run: |
+          cd data
           git config user.name "gem-bot"
           git config user.email "gem-bot@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/${{ github.repository_owner }}/investing-partner-data.git"
           [ -f "$REPORT_FILE" ] && git add "$REPORT_FILE"
           git commit -m "performance digest: $(date +%F) (run ${{ github.run_id }})" || echo "no changes"
           git push

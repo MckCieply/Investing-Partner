@@ -19,6 +19,29 @@ jobs:
         with: { python-version: '3.12' }
       - run: pip install -r requirements.txt
 
+      - name: mint data-repo token (read-only)
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.DATA_APP_CLIENT_ID }}
+          private-key: ${{ secrets.DATA_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: investing-partner-data
+          permission-contents: read
+
+      - name: checkout private data repo (read-only)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/investing-partner-data
+          token: ${{ steps.app-token.outputs.token }}
+          path: data
+
+      - name: link data repo into place
+        run: |
+          [ -f data/closed_positions.csv ] || touch data/closed_positions.csv
+          ln -sf "$(pwd)/data/closed_positions.csv" closed_positions.csv
+          ln -sf "$(pwd)/data/holdings.json" holdings.json
+
       - name: run reentry scanner
         run: |
           if [ ! -s closed_positions.csv ]; then
@@ -78,6 +101,26 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: reentry-candidates
+
+      - name: mint data-repo token (read-only)
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.DATA_APP_CLIENT_ID }}
+          private-key: ${{ secrets.DATA_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: investing-partner-data
+          permission-contents: read
+
+      - name: checkout private data repo (read-only)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/investing-partner-data
+          token: ${{ steps.app-token.outputs.token }}
+          path: data
+
+      - name: link data repo into place
+        run: ln -sf "$(pwd)/data/closed_positions.csv" closed_positions.csv
 
       - name: narrative / thesis check
         uses: anthropics/claude-code-action@v1
