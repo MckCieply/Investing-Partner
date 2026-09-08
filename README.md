@@ -12,7 +12,7 @@ Three of the five systems below run on plain Python — no model call, no token 
 |---|---|---|---|
 | [Position Auditor](#1-position-auditor) | weekly (Sun) | No | `stops_state.json`, `closed_positions.csv` |
 | [Re-entry Review](#2-re-entry-review) | weekly (Thu) | Gated — only when the deterministic scan finds a candidate | `reentry_candidates.json` (ephemeral) |
-| [Gem Pipeline](#3-gem-pipeline) | 2×/week (Sun, Wed) | Yes — 5-agent pipeline | `history/recommendations.csv`, `history/scout_tickers.csv` |
+| [Gem Pipeline](#3-gem-pipeline) | 3×/week (Sun, Wed, Fri) | Yes — 5-agent pipeline | `history/recommendations.csv`, `history/scout_tickers.csv` |
 | [Gem Tracker](#4-gem-tracker) | weekly (Fri) | Yes (smallest/cheapest model, no reasoning) | updates `history/recommendations.csv` |
 | [Performance Digest](#5-performance-digest) | monthly | No | reads the above, writes a report |
 
@@ -35,7 +35,9 @@ This is a scan, not a buy signal — the entry decision stays with the owner. A 
 ### 3. Gem Pipeline
 `.claude/skills/gem-inwestycyjny/`, [`.github/workflows/gem-pipeline.yml`](.github/workflows/gem-pipeline.yml)
 
-Five sequential LLM subagents — Scout → Quant → Alpha → Auditor → Director — searching for **new** entry candidates across the US and European markets (Xetra, Euronext, LSE, GPW, Oslo, Stockholm, NYSE/NASDAQ; Asia is explicitly out of mandate). This is discovery only — it does not manage positions already held, which is the Position Auditor's job. Every ticker the Quant stage scores gets logged to `history/recommendations.csv`, including the ones it rejects (with the specific gate that failed), so the pipeline's own hit rate is auditable later, not just its buy calls.
+Five sequential LLM subagents — Scout → Quant → Alpha → Auditor → Director — searching for **new** entry candidates across the US and European markets (Xetra, Euronext, LSE, GPW, Oslo, Stockholm, NYSE/NASDAQ; Asia is explicitly out of mandate). This is discovery only — it does not manage positions already held, which is the Position Auditor's job.
+
+Each stage runs on a different model and thinking budget, sized to how much judgment that stage actually needs — the same cost-consciousness as the deterministic/LLM split above, one level deeper: **Scout** (Sonnet, high effort) proposes candidates with a thesis and a specific invalidation scenario; **Quant** (Haiku, no reasoning) is a purely mechanical technical gate — price above SMA50/SMA200, RSI14 < 70; **Alpha** (Sonnet, medium effort) ranks survivors into a top pick vs. reserve list; **Auditor** (Sonnet, or Opus on the "max" quality preset) is the risk check — APPROVE / HOLD / VETO, including cutting position size in half when event risk (earnings, pending litigation) is elevated rather than a flat yes/no; **Director** (Sonnet, or Haiku to save cost) only writes up the decisions already made, adding no analysis of its own. Every ticker the Quant stage scores gets logged to `history/recommendations.csv`, including the ones any stage rejects or holds back (with the reason), so the pipeline's own hit rate is auditable later, not just its buy calls.
 
 ### 4. Gem Tracker
 [`.github/workflows/gem-tracker.yml`](.github/workflows/gem-tracker.yml)
@@ -46,6 +48,8 @@ A lightweight weekly job on the smallest available model, doing no reasoning of 
 `skills/performance-digest/`, [`.github/workflows/performance-digest.yml`](.github/workflows/performance-digest.yml)
 
 A deterministic monthly rollup — none of the systems above aggregate their own history over time; the Tracker only flips per-row status. This script reads `recommendations.csv`, `closed_positions.csv`, and `scout_tickers.csv` and asks the question none of the weekly jobs do: **does the pipeline's own filtering actually add value**, by comparing bought tickers against everything the pipeline rejected or held back, each measured as edge over SPY across the same window. It also checks `timing_bucket` calibration and the Auditor's win rate per stop-loss method. Sections built on fewer than 20 data points are explicitly flagged as too small to trust rather than left looking confident.
+
+This is *not* a second backtest — it audits the live pipeline's own small, growing sample with no pass/fail bar, where [Backtest](#backtest--does-any-entry-setup-beat-spy) below tests a hypothesis against a much larger, stricter one (n≥50, placebo-controlled) before anything reaches production.
 
 ## Backtest — does any entry setup beat SPY?
 
