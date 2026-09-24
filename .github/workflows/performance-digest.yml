@@ -1,7 +1,9 @@
 name: monthly-performance-digest
 on:
-  schedule:
-    - cron: '0 8 1 * *'      # 1. dzien miesiaca, 08:00 UTC (~10:00 PL)
+  # WYLACZONE do czasu pelnego configu (sekrety + wylaczenie workflowow w investing-partner-data).
+  # Wlaczenie = odkomentuj ponizsze linie.
+  # schedule:
+  #   - cron: '0 8 1 * *'      # 1. dzien miesiaca, 08:00 UTC (~10:00 PL)
   workflow_dispatch:
 permissions:
   contents: read

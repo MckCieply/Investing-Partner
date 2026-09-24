@@ -1,7 +1,9 @@
 name: weekly-reentry-review
 on:
-  schedule:
-    - cron: '0 8 * * 4'      # czwartek 08:00 UTC (~10:00 PL) - przeglad powrotu do zamknietych pozycji
+  # WYLACZONE do czasu pelnego configu (sekrety + wylaczenie workflowow w investing-partner-data).
+  # Wlaczenie = odkomentuj ponizsze linie.
+  # schedule:
+  #   - cron: '0 8 * * 4'      # czwartek 08:00 UTC (~10:00 PL) - przeglad powrotu do zamknietych pozycji
   workflow_dispatch:          # reczne odpalenie z zakladki Actions
 permissions:
   contents: read

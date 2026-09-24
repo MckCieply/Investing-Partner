@@ -61,6 +61,11 @@ Twarda zasada dla każdej zmiany w `.github/workflows/`:
 
 ## Co to za projekt
 
+> **Status (wrzesień 2026): wszystkie triggery automatyczne (cron/push/PR) są zakomentowane** —
+> każdy workflow ma tylko `workflow_dispatch`, dopóki nie są dodane sekrety i wyłączone stare
+> workflowy w `investing-partner-data` (patrz `GITHUB_APP_SETUP.md`). Opisy cronów niżej to stan
+> docelowy; włączenie = odkomentowanie bloku pod `on:`.
+
 Repo zawiera dwa niezależne, zautomatyzowane przez GitHub Actions narzędzia inwestycyjne dla osobistego portfela na XTB IKE:
 
 ### 1. Position Auditor (`skills/gem-position-auditor/`, `.github/workflows/audit.yml`)

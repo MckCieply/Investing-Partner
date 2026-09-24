@@ -3,9 +3,11 @@ name: ci
 # ktore dzialaja na prawdziwym portfelu i do logu wypisuja tylko liczby, tutaj
 # wszystko idzie na stdout i do Job Summary: widac, jak system dziala krok po kroku.
 on:
-  push:
-    branches: [main]
-  pull_request:
+  # WYLACZONE do czasu pelnego configu (sekrety + wylaczenie workflowow w investing-partner-data).
+  # Wlaczenie = odkomentuj ponizsze linie.
+  # push:
+  #   branches: [main]
+  # pull_request:
   workflow_dispatch:
 permissions:
   contents: read

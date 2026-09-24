@@ -1,7 +1,9 @@
 name: weekly-position-audit
 on:
-  schedule:
-    - cron: '0 7 * * 0'      # niedziela 07:00 UTC (~09:00 PL latem)
+  # WYLACZONE do czasu pelnego configu (sekrety + wylaczenie workflowow w investing-partner-data).
+  # Wlaczenie = odkomentuj ponizsze linie.
+  # schedule:
+  #   - cron: '0 7 * * 0'      # niedziela 07:00 UTC (~09:00 PL latem)
   workflow_dispatch:          # reczne odpalenie z zakladki Actions
 permissions:
   contents: read
