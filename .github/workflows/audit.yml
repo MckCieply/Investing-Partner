@@ -1,18 +1,34 @@
 name: weekly-position-audit
 on:
-  schedule:
-    - cron: '0 7 * * 0'      # niedziela 07:00 UTC (~09:00 PL latem)
+  # WYLACZONE do czasu pelnego configu (sekrety + wylaczenie workflowow w investing-partner-data).
+  # Wlaczenie = odkomentuj ponizsze linie.
+  # schedule:
+  #   - cron: '0 7 * * 0'      # niedziela 07:00 UTC (~09:00 PL latem)
   workflow_dispatch:          # reczne odpalenie z zakladki Actions
 permissions:
   contents: read
+# PUBLIC REPO: logi tego workflowu widzi kazdy. Skrypty czytajace dane portfela
+# ida przez .github/scripts/quiet-run.sh (nic nie trafia na stdout), a do logu /
+# Job Summary trafiaja tylko zagregowane liczby z public_summary.py.
 jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: preflight - required secrets
+        id: preflight
+        env:
+          DATA_APP_CLIENT_ID: ${{ secrets.DATA_APP_CLIENT_ID }}
+          DATA_APP_PRIVATE_KEY: ${{ secrets.DATA_APP_PRIVATE_KEY }}
+          GMAIL_USERNAME: ${{ secrets.GMAIL_USERNAME }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+        run: .github/scripts/require-env.sh DATA_APP_CLIENT_ID DATA_APP_PRIVATE_KEY GMAIL_USERNAME GMAIL_APP_PASSWORD MAIL_TO
+
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
-      - run: pip install -r requirements.txt
+      - run: pip install -q -r requirements.txt
 
       - name: mint data-repo token
         id: app-token
@@ -24,6 +40,7 @@ jobs:
           repositories: investing-partner-data
 
       - name: checkout private data repo
+        id: data
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/investing-partner-data
@@ -44,10 +61,16 @@ jobs:
           ln -sfn "$(pwd)/data/skills/gem-position-auditor/history" skills/gem-position-auditor/history
 
       - name: run position auditor
-        run: python skills/gem-position-auditor/position_auditor.py holdings.json | tee audit_report.txt
+        run: |
+          .github/scripts/quiet-run.sh position-auditor audit_report.txt -- \
+            python skills/gem-position-auditor/position_auditor.py holdings.json
+
+      - name: public summary
+        if: always() && steps.data.outcome == 'success'
+        run: python3 .github/scripts/public_summary.py audit data/stops_state.json
 
       - name: capture run log
-        if: always()
+        if: always() && steps.data.outcome == 'success'
         run: |
           RUNBOOK_DIR=data/skills/gem-position-auditor/history/runbook
           DATE=$(date +%F)
@@ -61,7 +84,7 @@ jobs:
           (cd "$RUNBOOK_DIR" && ls -1t run-*.txt 2>/dev/null | tail -n +6 | xargs -r rm --)
 
       - name: commit state
-        if: always()
+        if: always() && steps.data.outcome == 'success'
         run: |
           cd data
           git config user.name "gem-bot"
@@ -72,13 +95,14 @@ jobs:
           [ -f audit_report.txt ] && git add audit_report.txt
           [ -f audit_report.html ] && git add audit_report.html
           [ -d skills/gem-position-auditor/history/runbook ] && git add skills/gem-position-auditor/history/runbook
-          git commit -m "weekly audit $(date +%F) (run ${{ github.run_id }})" || echo "no changes"
-          git push
+          [ -d ci-logs ] && git add ci-logs
+          git commit -q -m "weekly audit $(date +%F) (run ${{ github.run_id }})" || echo "no changes"
+          git push -q
       - name: set report date
         if: always()
         run: echo "REPORT_DATE=$(date +%d.%m.%Y)" >> "$GITHUB_ENV"
       - name: email report
-        if: always()
+        if: always() && steps.data.outcome == 'success' && hashFiles('data/audit_report.html') != ''
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com

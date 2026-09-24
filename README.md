@@ -1,5 +1,12 @@
 # Investing-Partner
 
+[![ci](https://github.com/MckCieply/Investing-Partner/actions/workflows/ci.yml/badge.svg)](https://github.com/MckCieply/Investing-Partner/actions/workflows/ci.yml)
+[![position audit](https://github.com/MckCieply/Investing-Partner/actions/workflows/audit.yml/badge.svg)](https://github.com/MckCieply/Investing-Partner/actions/workflows/audit.yml)
+[![gem pipeline](https://github.com/MckCieply/Investing-Partner/actions/workflows/gem-pipeline.yml/badge.svg)](https://github.com/MckCieply/Investing-Partner/actions/workflows/gem-pipeline.yml)
+[![tracker](https://github.com/MckCieply/Investing-Partner/actions/workflows/gem-tracker.yml/badge.svg)](https://github.com/MckCieply/Investing-Partner/actions/workflows/gem-tracker.yml)
+[![re-entry](https://github.com/MckCieply/Investing-Partner/actions/workflows/reentry-review.yml/badge.svg)](https://github.com/MckCieply/Investing-Partner/actions/workflows/reentry-review.yml)
+[![digest](https://github.com/MckCieply/Investing-Partner/actions/workflows/performance-digest.yml/badge.svg)](https://github.com/MckCieply/Investing-Partner/actions/workflows/performance-digest.yml)
+
 A set of independently scheduled automation and research tools for a personal equity portfolio (XTB IKE, US/Europe mandate). This is **not** an investment product, a trading signal service, or a broker integration — every system here either watches a portfolio the owner already holds, or researches whether an idea is worth acting on. Trade decisions are made by the owner, by hand, outside this repo.
 
 **Personal tooling, not investment advice.** No audited track record, no forward-looking performance claims. `backtest/` and `skills/performance-digest/` exist specifically to check the tools' own numbers against reality, including the possibility that they add no value — see [Backtest](#backtest--does-any-entry-setup-beat-spy) below for a case where that's exactly what happened.
@@ -60,6 +67,32 @@ A lightweight weekly job on the smallest available model, doing no reasoning of 
 A deterministic monthly rollup — none of the systems above aggregate their own history over time; the Tracker only flips per-row status. This script reads `recommendations.csv`, `closed_positions.csv`, and `scout_tickers.csv` and asks the question none of the weekly jobs do: **does the pipeline's own filtering actually add value**, by comparing bought tickers against everything the pipeline rejected or held back, each measured as edge over SPY across the same window. It also checks `timing_bucket` calibration and the Auditor's win rate per stop-loss method. Sections built on fewer than 20 data points are explicitly flagged as too small to trust rather than left looking confident.
 
 This is *not* a second backtest — it audits the live pipeline's own small, growing sample with no pass/fail bar, where [Backtest](#backtest--does-any-entry-setup-beat-spy) below tests a hypothesis against a much larger, stricter one (n≥50, placebo-controlled) before anything reaches production.
+
+## CI in public, data in private
+
+Every scheduled job above runs **here**, in this public repo's Actions tab — but the portfolio it
+works on doesn't. Each run mints a one-hour GitHub App token, checks the private
+`investing-partner-data` repo out into `data/`, symlinks it into the paths the code expects, and
+commits results back there. Public Actions logs are world-readable, so the workflows are written
+to never print what they process:
+
+- Every script that touches portfolio data runs through
+  [`.github/scripts/quiet-run.sh`](.github/scripts/quiet-run.sh): stdout goes to a report file in
+  the private repo, stderr to a private log. On failure the public log gets the exit code and the
+  exception class — never the message, which could quote a ticker.
+- `claude-code-action` runs with `show_full_output: false`: the log shows the prompt (already in
+  this repo) and run metadata, not the session.
+- What *is* published comes from [`public_summary.py`](.github/scripts/public_summary.py) — aggregate
+  counts only, in each run's Job Summary: pipeline funnel (Scout → Quant → Alpha → Auditor →
+  Director), per-stage timing, turns and token cost, number of positions and exit signals.
+- No `upload-artifact` (public artifacts are downloadable) — Re-entry Review re-runs its
+  deterministic scan in the second job instead of passing tickers between jobs.
+
+To see the *logic* end to end, open the [`ci`](.github/workflows/ci.yml) workflow: on every push
+it runs the whole deterministic path — auditor, auto-logged exit, re-entry scan, re-entry
+context, performance digest — on a **fictional** portfolio in
+[`tests/fixtures/`](tests/fixtures/), with full output in the log, and self-tests that
+`quiet-run.sh` really keeps output out of it.
 
 ## Backtest — does any entry setup beat SPY?
 

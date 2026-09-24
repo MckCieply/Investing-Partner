@@ -1,0 +1,5 @@
+rec_id,run_date,ticker_xtb,ticker_yahoo,nazwa,motyw,entry_price,stop_loss,target_price,r_r_ratio,timing_bucket,target_date_est,conviction,outcome,outcome_reason,katalizator,status,date_resolved,last_checked_date,last_checked_price,pct_change_since_entry,pct_to_target,notes
+2026-06-07_SAP.DE,2026-06-07,SAP.DE,SAP.DE,SAP SE,demo: cloud ERP,200.00,185.00,240.00,2.7,WKRÓTCE,2026-09-07,ŚREDNIA,BOUGHT_FULL,demo row,demo,OPEN,,,,,,
+2026-06-07_KO,2026-06-07,KO.US,KO,Coca-Cola,demo: defensywa,60.00,56.00,70.00,2.5,ODLEGŁY,2026-12-07,NISKA,REJECTED_ALPHA,demo row,demo,OPEN,,,,,,
+2026-06-07_NVDA,2026-06-07,NVDA.US,NVDA,NVIDIA,demo: AI capex,120.00,105.00,,,,,,QUANT_REJECTED_RSI,demo row,,OPEN,,,,,,
+2026-06-07_ASML,2026-06-07,ASML.NL,ASML.AS,ASML,demo: litografia,650.00,600.00,800.00,3.0,TERAZ,2026-07-05,WYSOKA,AUDITOR_HOLD,demo row,demo,OPEN,,,,,,

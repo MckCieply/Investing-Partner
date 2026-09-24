@@ -1,0 +1,6 @@
+date,ticker_xtb,ticker_yahoo,nazwa,motyw,typ,novelty
+2026-06-07,SAP.DE,SAP.DE,SAP SE,demo: cloud ERP,TREND,NEW
+2026-06-07,KO.US,KO,Coca-Cola,demo: defensywa,MEANREVERT,NEW
+2026-06-07,NVDA.US,NVDA,NVIDIA,demo: AI capex,TREND,REPEAT
+2026-06-07,ASML.NL,ASML.AS,ASML,demo: litografia,TREND,NEW
+2026-06-07,MSFT.US,MSFT,Microsoft,demo: AI software,TREND,NEW

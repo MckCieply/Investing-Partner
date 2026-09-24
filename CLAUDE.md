@@ -43,7 +43,28 @@ przypadkiem cytowały prawdziwe liczby (ceny wejścia/wyjścia), zostały zredag
 - **Pipeline first.** Jeśli dane zadanie może być wykonane przez GitHub Actions (cron, workflow_dispatch, Python skrypt w CI) — powinno być tam zrobione, nie lokalnie ani ręcznie w sesji. Ręczna praca lokalna to prototyp lub jednorazowy fix; docelowo każde powtarzalne działanie trafia do pipeline'u.
 - **Persistuj dane przedstawione przez użytkownika — ale do `investing-partner-data`, nie tutaj.** Gdy użytkownik podaje dane (pozycje portfela, ceny wejścia, decyzje o kupnie/sprzedaży, wyniki transakcji), zapisuj je w prywatnym repo. Dane prezentowane jako zdjęcie/screenshot traktuj jak dane do wprowadzenia, a nie tylko do przeczytania.
 
+## Publiczne logi CI — nic z danych na stdout
+
+Workflowy biegną w tym (publicznym) repo, więc **ich logi, Job Summary i artefakty widzi każdy**.
+Twarda zasada dla każdej zmiany w `.github/workflows/`:
+
+- Każdy skrypt czytający `data/` odpalaj przez `.github/scripts/quiet-run.sh LABEL OUT -- cmd`
+  (stdout → plik raportu w `data/`, stderr → `data/ci-logs/`; przy błędzie log dostaje tylko exit
+  code + nazwę klasy wyjątku). Nigdy `| tee`, `cat raport`, `echo $TICKERS`.
+- Do logu / `$GITHUB_STEP_SUMMARY` tylko to, co wypisuje `.github/scripts/public_summary.py`
+  (zagregowane liczby). Nowa metryka = nowa subkomenda tam, nie `echo` w workflowie.
+- `claude-code-action` zawsze z `show_full_output: false`. **Nigdy nie re-runuj z "Enable debug
+  logging"** — debug mode wypisuje pełny przebieg sesji Claude'a razem z treścią raportów.
+- Zero `upload-artifact` z danymi, zero job outputs z tickerami.
+- Logikę pokazujemy w `ci.yml` na fikcyjnych danych z `tests/fixtures/` — tam pełny output jest OK.
+  Krok 7 tego workflowu testuje, że `quiet-run.sh` faktycznie niczego nie wypuszcza.
+
 ## Co to za projekt
+
+> **Status (wrzesień 2026): wszystkie triggery automatyczne (cron/push/PR) są zakomentowane** —
+> każdy workflow ma tylko `workflow_dispatch`, dopóki nie są dodane sekrety i wyłączone stare
+> workflowy w `investing-partner-data` (patrz `GITHUB_APP_SETUP.md`). Opisy cronów niżej to stan
+> docelowy; włączenie = odkomentowanie bloku pod `on:`.
 
 Repo zawiera dwa niezależne, zautomatyzowane przez GitHub Actions narzędzia inwestycyjne dla osobistego portfela na XTB IKE:
 
@@ -57,7 +78,7 @@ Repo zawiera dwa niezależne, zautomatyzowane przez GitHub Actions narzędzia in
 ### 1b. Re-entry Review (Agent 6b, `skills/gem-position-auditor/reentry_scanner.py`, `.github/workflows/reentry-review.yml`)
 Dwuwarstwowy przepływ, cron czwartek 08:00 UTC + `workflow_dispatch`:
 - **Bramka techniczna (job `reentry`, zawsze, bez LLM — nie zużywa limitu Pro).** Skaner czyta `closed_positions.csv` i ocenia, czy setup techniczny, który nas wybił, się odwrócił (cena vs stary stop, SMA50/200, ret20, RSI) → werdykt `RE-ENTER` / `WATCH` / `SKIP`. Pomija tickery już z powrotem w `holdings.json` oraz zamknięte dawniej niż `--max-age-days` (365). Zapisuje `reentry_candidates.json` (tickery z `RE-ENTER`) i wysyła HTML mailem (bez commitu — raport efemeryczny).
-- **Warstwa narracyjna (job `narrative`, LLM, tylko gdy `has_candidates == true`).** Odpala się **wyłącznie** gdy bramka techniczna wypuściła ≥1 `RE-ENTER` (gate przez output joba + `if:`), więc w tygodnie bez kandydatów limit Pro się nie rusza. Dla każdego kandydata robi WebSearch newsów od daty wyjścia i wydaje werdykt `THESIS_BACK` / `MIXED` / `THESIS_DEAD` (raport `reentry_narrative.md` mailem). Auth i pułapki jak w `gem-pipeline.yml` (OIDC `id-token: write`, GitHub App). Lista kandydatów wędruje między jobami przez `upload/download-artifact`.
+- **Warstwa narracyjna (job `narrative`, LLM, tylko gdy `has_candidates == true`).** Odpala się **wyłącznie** gdy bramka techniczna wypuściła ≥1 `RE-ENTER` (gate przez output joba + `if:`), więc w tygodnie bez kandydatów limit Pro się nie rusza. Dla każdego kandydata robi WebSearch newsów od daty wyjścia i wydaje werdykt `THESIS_BACK` / `MIXED` / `THESIS_DEAD` (raport `reentry_narrative.md` mailem). Auth i pułapki jak w `gem-pipeline.yml` (OIDC `id-token: write`, GitHub App). Między jobami idzie tylko flaga `has_candidates` — job narracyjny sam odpala skaner ponownie, zamiast dostawać tickery przez artefakt (w publicznym repo artefakty może pobrać każdy).
 - To skan/analiza, **nie sygnał kupna** — decyzję o wejściu podejmuje użytkownik.
 - **Pamięć międzysystemowa (`reentry_context.py`).** Auditor (wyjścia) i Pipeline (wejścia) nie mają wspólnego stanu, więc pipeline potrafi zarekomendować powrót do tickera wybitego dzień wcześniej. Ten deterministyczny, idempotentny krok (tylko stdlib) dopisuje do `recommendations.csv` w kolumnie `notes` tag `[RE-ENTRY: wyjście DD.MM @ EXIT (powód, Nd temu); wejście @ ENTRY = ±X% vs wyjście]` dla każdej rekomendacji, której ticker jest w `closed_positions.csv` (data zamknięcia ≤ run_date). Ujemna delta = „kup taniej niż sprzedałeś", dodatnia = „chase, uwaga". Wpięty jako krok w `gem-pipeline.yml` (po logowaniu rekomendacji) i `gem-tracker.yml` (co piątek).
 
@@ -109,4 +130,14 @@ Nieobjęte katalogiem (logi, nie dokumentacja referencyjna): `reports/*.md` (wyg
 - Manualny re-run `gem-pipeline.yml` tego samego dnia (np. inny `--quality`) może się "udać" bez wykonania żadnej pracy: orchestrator widzi, że `reports/gem-<data>.md` już istnieje z wcześniejszego runu i kończy turę w ~5 turns/20s bez dispatchu Scout→Director, zostawiając stary plik nietknięty — `verify report produced` przechodził, bo sprawdzał tylko obecność/keywords w pliku, nie to, czy ten konkretny run go zmienił. Fix: SKILL.md ma teraz explicit zakaz pomijania pipeline'u z tego powodu + workflow dodatkowo wymaga `git status --porcelain` na pliku raportu (musi się różnić od HEAD) — **uwaga: to sprawdzenie musi teraz biec wewnątrz `data/` (`cd data && git status --porcelain -- "$REPORT_FILE"`), nie w tym repo, bo raport fizycznie żyje w `investing-partner-data`.**
 - **Dwa repo w jednym jobie = dwa oddzielne `git remote set-url` przed push.** `claude-code-action@v1` podstawia własny credential helper na runnerze (patrz punkt wyżej) — dotyczy to całego runnera, nie tylko checkoutu, w którym action się wykonał. Fix jest identyczny jak dla `origin`: embedded token w URL (`https://x-access-token:$TOKEN@github.com/...`) bije każdy credential helper, więc krok commitujący do `data/` robi swój własny `git remote set-url` z tokenem z GitHub App, osobno od tego, co dzieje się w root repo.
 - `actions/checkout@v4` z `repository:`/`token:`/`path:` na drugie, prywatne repo działa bez konfliktu z pierwszym (domyślnym) checkoutem — muszą tylko mieć różne `path:`. Domyślny `fetch-depth: 1` (shallow) wystarcza — nie potrzeba pełnej historii, żeby czytać/nadpisywać stan i pushować nowy commit na czubek.
+- **Po splicie sekrety nie przeszły same** (wrzesień 2026): `filter-repo` + nowe repo = zero
+  sekretów Actions, a stare zostały w repo przemianowanym na `investing-partner-data`. Skutek:
+  każdy cron w publicznym repo padał na `client-id must be set`, a pod spodem kaskada `cd: data:
+  No such file or directory` i nieudany mail. Stąd krok `preflight` (`require-env.sh`) na
+  początku każdego workflowu i `if: always() && steps.data.outcome == 'success'` zamiast gołego
+  `always()` na krokach dotykających `data/`.
+- **Przemianowane stare repo miało nadal swoje workflowy i sekrety** — przez dwa tygodnie po
+  splicie cała praca faktycznie działała w `investing-partner-data`, a publiczne repo tylko
+  czerwieniło. Workflowy w `investing-partner-data` muszą być wyłączone (Actions → Disable
+  workflow), inaczej każdy cron biegnie 2× (podwójny limit Pro, dwa pushe do tych samych plików).
 - GitHub App installation token (`actions/create-github-app-token`) wygasa po godzinie i jest mintowany od nowa przy każdym runie — nie ma czego "rotować" ręcznie poza samym kluczem prywatnym Appki (patrz `GITHUB_APP_SETUP.md`). To świadomy wybór nad fine-grained PAT: PAT wiąże się z kontem osobistym i wygasa max po 366 dniach, co przy czterech niezależnych cronach oznacza ciche, niezauważone padanie pusha, dopóki ktoś nie zauważy braku maila.

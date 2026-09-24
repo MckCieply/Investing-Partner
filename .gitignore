@@ -20,3 +20,7 @@ reentry_narrative.md
 /.claude/skills/gem-inwestycyjny/history/
 /skills/gem-position-auditor/history/
 report.md
+
+# ...except the fictional demo portfolio used by .github/workflows/ci.yml
+!/tests/fixtures/holdings.json
+!/tests/fixtures/closed_positions.csv

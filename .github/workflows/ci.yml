@@ -1,0 +1,118 @@
+name: ci
+# Publiczne CI na FIKCYJNYCH danych (tests/fixtures/) — w odroznieniu od cronow,
+# ktore dzialaja na prawdziwym portfelu i do logu wypisuja tylko liczby, tutaj
+# wszystko idzie na stdout i do Job Summary: widac, jak system dziala krok po kroku.
+on:
+  # WYLACZONE do czasu pelnego configu (sekrety + wylaczenie workflowow w investing-partner-data).
+  # Wlaczenie = odkomentuj ponizsze linie.
+  # push:
+  #   branches: [main]
+  # pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+
+      - name: python compiles
+        run: python -m compileall -q skills backtest .github/scripts
+
+      - name: actionlint (workflow syntax + shellcheck of run blocks)
+        env:
+          SHELLCHECK_OPTS: -e SC2012   # `ls -1t | tail | xargs rm` rotacja logow po mtime — celowo
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash) 1.7.12
+          ./actionlint -color
+
+      - name: shellcheck helper scripts
+        run: shellcheck .github/scripts/*.sh
+
+  demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DEMO: ${{ github.workspace }}/../demo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -q -r requirements.txt
+
+      - name: stage demo portfolio
+        run: |
+          mkdir -p "$DEMO"
+          cp tests/fixtures/*.json tests/fixtures/*.csv "$DEMO"/
+          ls -l "$DEMO"
+
+      - name: "1. position auditor — first run (3 pozycje)"
+        working-directory: ${{ env.DEMO }}
+        run: |
+          python "$GITHUB_WORKSPACE/skills/gem-position-auditor/position_auditor.py" holdings.json | tee audit-1.txt
+          { echo '### 1. Position auditor — pierwszy run'; echo '```'; cat audit-1.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: "2. position auditor — SAP.DE zamknięte → auto-log do closed_positions.csv"
+        working-directory: ${{ env.DEMO }}
+        run: |
+          python "$GITHUB_WORKSPACE/skills/gem-position-auditor/position_auditor.py" holdings_after_exit.json | tee audit-2.txt
+          echo "--- closed_positions.csv po runie ---"
+          cat closed_positions.csv
+          grep -q '^[0-9-]*,SAP.DE,' closed_positions.csv || { echo "::error::SAP.DE closure was not auto-logged"; exit 1; }
+          { echo '### 2. Auditor — pozycja zniknęła z holdings → auto-log zamknięcia'; echo '```'; cat audit-2.txt; echo; cat closed_positions.csv; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: "3. re-entry scanner (bramka techniczna)"
+        working-directory: ${{ env.DEMO }}
+        run: |
+          python "$GITHUB_WORKSPACE/skills/gem-position-auditor/reentry_scanner.py" closed_positions.csv \
+            --holdings holdings_after_exit.json --candidates-out reentry_candidates.json | tee reentry.txt
+          { echo '### 3. Re-entry scanner'; echo '```'; cat reentry.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: "4. re-entry context (pamięć między auditorem a pipeline'em)"
+        working-directory: ${{ env.DEMO }}
+        run: |
+          python "$GITHUB_WORKSPACE/skills/gem-position-auditor/reentry_context.py" recommendations.csv closed_positions.csv | tee context.txt
+          grep -q 'RE-ENTRY' recommendations.csv || { echo "::error::KO.US recommendation was not tagged with its prior exit"; exit 1; }
+          { echo '### 4. Re-entry context'; echo '```'; cat context.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: "5. performance digest"
+        working-directory: ${{ env.DEMO }}
+        run: |
+          python "$GITHUB_WORKSPACE/skills/performance-digest/performance_digest.py" \
+            --recommendations recommendations.csv --closed closed_positions.csv --scout scout_tickers.csv | tee digest.md
+          { echo '### 5. Performance digest'; cat digest.md; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: "6. public summaries — to samo, co crony publikują dla prawdziwego portfela"
+        working-directory: ${{ env.DEMO }}
+        run: |
+          S="$GITHUB_WORKSPACE/.github/scripts/public_summary.py"
+          python "$S" audit stops_state.json
+          python "$S" funnel recommendations.csv scout_tickers.csv --date 2026-06-07
+          python "$S" tracker recommendations.csv
+          python "$S" reentry reentry_candidates.json
+
+      - name: "7. privacy guard — quiet-run.sh nie wypuszcza niczego do logu"
+        run: |
+          export CI_LOG_DIR="$DEMO/ci-logs"
+          out=$(.github/scripts/quiet-run.sh guard-ok "$DEMO/guard.txt" -- \
+                  python -c "import sys; print('SECRET-TICKER 123.45'); print('SECRET-STDERR', file=sys.stderr)")
+          echo "$out"
+          if grep -q SECRET <<<"$out"; then echo "::error::quiet-run leaked command output"; exit 1; fi
+          grep -q SECRET-TICKER "$DEMO/guard.txt" && grep -q SECRET-STDERR "$CI_LOG_DIR"/*guard-ok.stderr.txt
+
+          # failure path: exit code + exception class only, never the message
+          set +e
+          out=$(.github/scripts/quiet-run.sh guard-fail - -- \
+                  python -c "raise ValueError('SECRET-TICKER stop 99.1')" 2>&1)
+          rc=$?
+          set -e
+          echo "$out"
+          [ "$rc" -eq 1 ] || { echo "::error::quiet-run did not propagate exit code ($rc)"; exit 1; }
+          grep -q 'ValueError' <<<"$out" || { echo "::error::quiet-run did not report exception type"; exit 1; }
+          if grep -q SECRET <<<"$out"; then echo "::error::quiet-run leaked exception message"; exit 1; fi
+          echo "privacy guard OK" | tee -a "$GITHUB_STEP_SUMMARY"

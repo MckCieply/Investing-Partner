@@ -1,17 +1,32 @@
 name: weekly-recommendation-tracker
 on:
-  schedule:
-    - cron: '0 8 * * 5'      # piatek 08:00 UTC (~10:00 PL)
+  # WYLACZONE do czasu pelnego configu (sekrety + wylaczenie workflowow w investing-partner-data).
+  # Wlaczenie = odkomentuj ponizsze linie.
+  # schedule:
+  #   - cron: '0 8 * * 5'      # piatek 08:00 UTC (~10:00 PL)
   workflow_dispatch:
 permissions:
   contents: read
   id-token: write
+# PUBLIC REPO: logi tego workflowu widzi kazdy — zasady jak w gem-pipeline.yml
+# (show_full_output off, quiet-run.sh, tylko liczby z public_summary.py, bez debug mode).
 jobs:
   tracker:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+
+      - name: preflight - required secrets
+        id: preflight
+        env:
+          DATA_APP_CLIENT_ID: ${{ secrets.DATA_APP_CLIENT_ID }}
+          DATA_APP_PRIVATE_KEY: ${{ secrets.DATA_APP_PRIVATE_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GMAIL_USERNAME: ${{ secrets.GMAIL_USERNAME }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+        run: .github/scripts/require-env.sh DATA_APP_CLIENT_ID DATA_APP_PRIVATE_KEY CLAUDE_CODE_OAUTH_TOKEN GMAIL_USERNAME GMAIL_APP_PASSWORD MAIL_TO
 
       - name: set report path
         run: echo "REPORT_FILE=reports/tracker-$(date +%F).md" >> "$GITHUB_ENV"
@@ -26,6 +41,7 @@ jobs:
           repositories: investing-partner-data
 
       - name: checkout private data repo
+        id: data
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/investing-partner-data
@@ -46,6 +62,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          show_full_output: false   # public repo — never flip this on
           prompt: |
             Wykonaj WYŁĄCZNIE sekcję "Weekly Tracker (osobny przepływ, nie część
             głównego pipeline'u)" z .claude/skills/gem-inwestycyjny/SKILL.md:
@@ -68,7 +85,7 @@ jobs:
             --disallowedTools "ScheduleWakeup" "SendMessage" "TaskCreate" "TaskUpdate" "TaskGet" "TaskList" "TaskOutput" "TaskStop" "Monitor" "PushNotification"
 
       - name: capture run log
-        if: always()
+        if: always() && steps.data.outcome == 'success'
         run: |
           RUNBOOK_DIR=.claude/skills/gem-inwestycyjny/tracker-runbook
           FULL_DIR="$RUNBOOK_DIR/full"
@@ -89,34 +106,12 @@ jobs:
             echo '{"error":"execution log not found at expected path"}' > "$RUN_FILE"
           fi
 
-          python3 - "$RUN_FILE" "$DATE" "${{ github.run_id }}" >> "$SUMMARY_FILE" <<'PYEOF'
-          import json, sys
-          path, date, run_id = sys.argv[1], sys.argv[2], sys.argv[3]
-          try:
-              with open(path) as f:
-                  data = json.load(f)
-          except Exception as e:
-              print(json.dumps({"run_id": run_id, "date": date, "error": f"failed to parse log: {e}"}))
-              sys.exit(0)
-          if isinstance(data, list):
-              result = next((e for e in reversed(data) if isinstance(e, dict) and e.get("type") == "result"), {})
-          elif isinstance(data, dict) and data.get("type") == "result":
-              result = data
-          else:
-              result = data if isinstance(data, dict) else {}
-          denials = result.get("permission_denials") or []
-          summary = {
-              "run_id": run_id,
-              "date": date,
-              "subtype": result.get("subtype"),
-              "is_error": result.get("is_error"),
-              "num_turns": result.get("num_turns"),
-              "total_cost_usd": result.get("total_cost_usd"),
-              "permission_denials_count": result.get("permission_denials_count", len(denials)),
-              "error": result.get("result") if result.get("is_error") else None,
-          }
-          print(json.dumps(summary))
-          PYEOF
+          # full summary (incl. error text) -> private summary.jsonl;
+          # only turns/cost -> public log + Job Summary
+          python3 .github/scripts/public_summary.py claude-run "$RUN_FILE" "$SUMMARY_FILE" \
+            --run-id "${{ github.run_id }}" --date "$DATE" --title "Weekly Tracker (Agent 06)"
+          python3 .github/scripts/public_summary.py tracker \
+            .claude/skills/gem-inwestycyjny/history/recommendations.csv
 
           # lighter caps than the main pipeline: keep newest 3 full logs
           (cd "$FULL_DIR" && ls -1t run-*.json 2>/dev/null | tail -n +4 | xargs -r rm --)
@@ -127,17 +122,18 @@ jobs:
           fi
 
       - name: annotate re-entry context
-        if: always()
+        if: always() && steps.data.outcome == 'success'
         run: |
           # pamiec miedzysystemowa: dopisz do rekomendacji kontekst wyjscia, jesli
           # ich ticker jest w closed_positions.csv (Auditor niedawno go zamknal).
           # Deterministyczny, idempotentny, tylko stdlib — bez pip.
-          python3 skills/gem-position-auditor/reentry_context.py \
+          .github/scripts/quiet-run.sh reentry-context - -- \
+            python3 skills/gem-position-auditor/reentry_context.py \
             .claude/skills/gem-inwestycyjny/history/recommendations.csv closed_positions.csv \
             || echo "reentry_context: non-fatal, pomijam"
 
       - name: verify report produced
-        if: always()
+        if: always() && steps.data.outcome == 'success'
         run: |
           # Same green-but-empty guard as gem-pipeline: a stalled Tracker can
           # self-report success without writing its weekly summary.
@@ -150,7 +146,7 @@ jobs:
           fi
 
       - name: commit tracker update
-        if: always()
+        if: always() && steps.data.outcome == 'success'
         run: |
           cd data
           git config user.name "gem-bot"
@@ -159,8 +155,9 @@ jobs:
           [ -f "$REPORT_FILE" ] && git add "$REPORT_FILE"
           [ -f .claude/skills/gem-inwestycyjny/history/recommendations.csv ] && git add .claude/skills/gem-inwestycyjny/history/recommendations.csv
           [ -d .claude/skills/gem-inwestycyjny/tracker-runbook ] && git add .claude/skills/gem-inwestycyjny/tracker-runbook
-          git commit -m "weekly tracker: $(date +%F) (run ${{ github.run_id }})" || echo "no changes"
-          git push
+          [ -d ci-logs ] && git add ci-logs
+          git commit -q -m "weekly tracker: $(date +%F) (run ${{ github.run_id }})" || echo "no changes"
+          git push -q
 
       - name: set email subject date
         if: always()
@@ -181,7 +178,7 @@ jobs:
           convert_markdown: true
 
       - name: email failure notice
-        if: always() && env.REPORT_OK != 'true'
+        if: always() && steps.preflight.outcome == 'success' && env.REPORT_OK != 'true'
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
