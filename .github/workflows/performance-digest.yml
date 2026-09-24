@@ -5,12 +5,25 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+# PUBLIC REPO: logi tego workflowu widzi kazdy — digest idzie przez quiet-run.sh
+# prosto do pliku w data/ i mailem, nigdy na stdout.
 jobs:
   digest:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+
+      - name: preflight - required secrets
+        id: preflight
+        env:
+          DATA_APP_CLIENT_ID: ${{ secrets.DATA_APP_CLIENT_ID }}
+          DATA_APP_PRIVATE_KEY: ${{ secrets.DATA_APP_PRIVATE_KEY }}
+          GMAIL_USERNAME: ${{ secrets.GMAIL_USERNAME }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+        run: .github/scripts/require-env.sh DATA_APP_CLIENT_ID DATA_APP_PRIVATE_KEY GMAIL_USERNAME GMAIL_APP_PASSWORD MAIL_TO
+
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
 
@@ -27,6 +40,7 @@ jobs:
           repositories: investing-partner-data
 
       - name: checkout private data repo
+        id: data
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/investing-partner-data
@@ -42,30 +56,33 @@ jobs:
 
       - name: run performance digest
         run: |
-          pip install yfinance pandas
-          python skills/performance-digest/performance_digest.py \
+          pip install -q yfinance pandas
+          .github/scripts/quiet-run.sh performance-digest "$REPORT_FILE" -- \
+            python skills/performance-digest/performance_digest.py \
             --recommendations .claude/skills/gem-inwestycyjny/history/recommendations.csv \
             --closed closed_positions.csv \
-            --scout .claude/skills/gem-inwestycyjny/history/scout_tickers.csv \
-            | tee "$REPORT_FILE"
+            --scout .claude/skills/gem-inwestycyjny/history/scout_tickers.csv
+          echo "### Performance Digest" >> "$GITHUB_STEP_SUMMARY"
+          echo "Raport wygenerowany ($(wc -l < "$REPORT_FILE") linii) — commit do repo danych + mail." >> "$GITHUB_STEP_SUMMARY"
 
       - name: commit report
-        if: always()
+        if: always() && steps.data.outcome == 'success'
         run: |
           cd data
           git config user.name "gem-bot"
           git config user.email "gem-bot@users.noreply.github.com"
           git remote set-url origin "https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/${{ github.repository_owner }}/investing-partner-data.git"
           [ -f "$REPORT_FILE" ] && git add "$REPORT_FILE"
-          git commit -m "performance digest: $(date +%F) (run ${{ github.run_id }})" || echo "no changes"
-          git push
+          [ -d ci-logs ] && git add ci-logs
+          git commit -q -m "performance digest: $(date +%F) (run ${{ github.run_id }})" || echo "no changes"
+          git push -q
 
       - name: set email subject date
         if: always()
         run: echo "MAIL_DATE=$(date +%d.%m.%Y)" >> "$GITHUB_ENV"
 
       - name: email report
-        if: always()
+        if: always() && steps.data.outcome == 'success' && hashFiles(format('data/{0}', env.REPORT_FILE)) != ''
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com

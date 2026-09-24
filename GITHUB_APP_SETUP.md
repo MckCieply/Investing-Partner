@@ -66,9 +66,20 @@ Also install the **Claude Code** GitHub App (`https://github.com/apps/claude`) o
 `Investing-Partner` if it isn't already — `claude-code-action@v1` needs it for OIDC, separately
 from the App created above.
 
-## 4. Verify
+## 4. Turn off the old workflows in the data repo
 
-Run any workflow manually (Actions tab → pick one → **Run workflow**) and check the "checkout
-private data repo" step succeeds. If it fails with an auth error, double check the App is
+`investing-partner-data` is the renamed original single-repo, so it still carries its own copy of
+`.github/workflows/` **and** its own secrets — left alone, every cron fires twice (once per repo),
+burning the Claude Pro limit twice and racing two pushes to the same files. In
+`investing-partner-data` → **Actions**, open each of the five workflows → **⋯ → Disable workflow**
+(or delete `.github/workflows/` from that repo). The data repo should only ever receive commits,
+never run anything.
+
+## 5. Verify
+
+Start with `weekly-position-audit` — no LLM, so it doesn't touch the Pro limit. Run it manually
+(Actions tab → pick it → **Run workflow**). The first step, `preflight - required secrets`, names
+every secret that is still missing; once it passes, check the "checkout private data repo" step
+succeeds, and that the log shows only counts (no tickers or prices) in the Job Summary. If it fails with an auth error, double check the App is
 installed on `investing-partner-data` specifically (step 2) and that `DATA_APP_PRIVATE_KEY`
 was pasted with no extra leading/trailing whitespace stripped or added.

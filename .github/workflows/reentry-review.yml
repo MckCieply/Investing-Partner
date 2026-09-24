@@ -6,18 +6,34 @@ on:
 permissions:
   contents: read
   id-token: write             # OIDC wymagany przez claude-code-action (job narracyjny)
+# PUBLIC REPO: logi i artefakty tego workflowu widzi kazdy. Dlatego lista kandydatow
+# NIE wedruje miedzy jobami przez upload-artifact (publiczny do pobrania) ani przez
+# job outputs z tickerami — job narracyjny sam odpala deterministyczny skaner jeszcze
+# raz. Miedzy jobami idzie tylko flaga has_candidates.
 jobs:
   # --- BRAMKA TECHNICZNA: deterministyczny skaner, bez LLM, zawsze ---
   reentry:
     runs-on: ubuntu-latest
+    env:
+      CI_LOG_DIR: ${{ github.workspace }}/../ci-logs   # read-only job: logi nie sa nigdzie commitowane
     outputs:
       has_candidates: ${{ steps.gate.outputs.has_candidates }}
-      tickers: ${{ steps.gate.outputs.tickers }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: preflight - required secrets
+        id: preflight
+        env:
+          DATA_APP_CLIENT_ID: ${{ secrets.DATA_APP_CLIENT_ID }}
+          DATA_APP_PRIVATE_KEY: ${{ secrets.DATA_APP_PRIVATE_KEY }}
+          GMAIL_USERNAME: ${{ secrets.GMAIL_USERNAME }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+        run: .github/scripts/require-env.sh DATA_APP_CLIENT_ID DATA_APP_PRIVATE_KEY GMAIL_USERNAME GMAIL_APP_PASSWORD MAIL_TO
+
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
-      - run: pip install -r requirements.txt
+      - run: pip install -q -r requirements.txt
 
       - name: mint data-repo token (read-only)
         id: app-token
@@ -30,6 +46,7 @@ jobs:
           permission-contents: read
 
       - name: checkout private data repo (read-only)
+        id: data
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/investing-partner-data
@@ -50,34 +67,25 @@ jobs:
             echo "SKIP_MAIL=true" >> "$GITHUB_ENV"
             exit 0
           fi
-          python skills/gem-position-auditor/reentry_scanner.py closed_positions.csv \
+          .github/scripts/quiet-run.sh reentry-scanner reentry_report.txt -- \
+            python skills/gem-position-auditor/reentry_scanner.py closed_positions.csv \
             --holdings holdings.json --html-out reentry_report.html \
-            --candidates-out reentry_candidates.json | tee reentry_report.txt
+            --candidates-out reentry_candidates.json
 
       - name: gate on candidates
         id: gate
-        if: always()
+        if: always() && steps.data.outcome == 'success'
         run: |
           COUNT=$(python -c "import json,os; p='reentry_candidates.json'; print(len(json.load(open(p))) if os.path.exists(p) else 0)")
-          TICKERS=$(python -c "import json,os; p='reentry_candidates.json'; d=json.load(open(p)) if os.path.exists(p) else []; print(','.join(x['xtb'] for x in d))")
           if [ "$COUNT" -gt 0 ]; then echo "has_candidates=true" >> "$GITHUB_OUTPUT"; else echo "has_candidates=false" >> "$GITHUB_OUTPUT"; fi
-          echo "tickers=$TICKERS" >> "$GITHUB_OUTPUT"
-          echo "RE-ENTER candidates: $COUNT ($TICKERS)"
-
-      - name: upload candidates
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: reentry-candidates
-          path: reentry_candidates.json
-          retention-days: 7
+          python3 .github/scripts/public_summary.py reentry reentry_candidates.json
 
       - name: set report date
         if: always()
         run: echo "REPORT_DATE=$(date +%d.%m.%Y)" >> "$GITHUB_ENV"
 
       - name: email report (technical)
-        if: always() && env.SKIP_MAIL != 'true'
+        if: always() && steps.data.outcome == 'success' && env.SKIP_MAIL != 'true' && hashFiles('reentry_report.html') != ''
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
@@ -95,12 +103,19 @@ jobs:
     if: needs.reentry.outputs.has_candidates == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      CI_LOG_DIR: ${{ github.workspace }}/../ci-logs
     steps:
       - uses: actions/checkout@v4
-      - name: fetch candidates from technical job
-        uses: actions/download-artifact@v4
-        with:
-          name: reentry-candidates
+
+      - name: preflight - required secrets
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: .github/scripts/require-env.sh CLAUDE_CODE_OAUTH_TOKEN
+
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install -q -r requirements.txt
 
       - name: mint data-repo token (read-only)
         id: app-token
@@ -120,12 +135,24 @@ jobs:
           path: data
 
       - name: link data repo into place
-        run: ln -sf "$(pwd)/data/closed_positions.csv" closed_positions.csv
+        run: |
+          ln -sf "$(pwd)/data/closed_positions.csv" closed_positions.csv
+          ln -sf "$(pwd)/data/holdings.json" holdings.json
+
+      - name: rebuild candidate list
+        run: |
+          # ten sam deterministyczny skaner co w jobie `reentry` — zamiast przekazywac
+          # tickery przez publiczny artefakt. Minuty roznicy w cenach nie zmieniaja werdyktu.
+          .github/scripts/quiet-run.sh reentry-scanner - -- \
+            python skills/gem-position-auditor/reentry_scanner.py closed_positions.csv \
+            --holdings holdings.json --html-out "$RUNNER_TEMP/reentry_report.html" \
+            --candidates-out reentry_candidates.json
 
       - name: narrative / thesis check
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          show_full_output: false   # public repo — never flip this on
           prompt: |
             Jesteś analitykiem re-entry. Pozycje z `reentry_candidates.json` przeszły
             BRAMKĘ TECHNICZNĄ re-entry scannera (trend/momentum odzyskane). Twoim

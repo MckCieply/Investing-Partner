@@ -12,12 +12,28 @@ on:
 permissions:
   contents: read
   id-token: write
+# PUBLIC REPO: logi tego workflowu widzi kazdy. claude-code-action ma show_full_output
+# wylaczone (wypisuje tylko prompt z tego pliku + metadane), skrypty czytajace dane
+# ida przez quiet-run.sh, a do logu / Job Summary trafiaja tylko liczby z
+# public_summary.py. NIE odpalaj re-runu z "Enable debug logging" — debug mode
+# wypisuje pelny przebieg sesji Claude'a, lacznie z tresc raportow.
 jobs:
   gem:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+
+      - name: preflight - required secrets
+        id: preflight
+        env:
+          DATA_APP_CLIENT_ID: ${{ secrets.DATA_APP_CLIENT_ID }}
+          DATA_APP_PRIVATE_KEY: ${{ secrets.DATA_APP_PRIVATE_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GMAIL_USERNAME: ${{ secrets.GMAIL_USERNAME }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+        run: .github/scripts/require-env.sh DATA_APP_CLIENT_ID DATA_APP_PRIVATE_KEY CLAUDE_CODE_OAUTH_TOKEN GMAIL_USERNAME GMAIL_APP_PASSWORD MAIL_TO
 
       - name: set report path
         run: echo "REPORT_FILE=reports/gem-$(date +%F).md" >> "$GITHUB_ENV"
@@ -32,6 +48,7 @@ jobs:
           repositories: investing-partner-data
 
       - name: checkout private data repo
+        id: data
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/investing-partner-data
@@ -56,6 +73,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          show_full_output: false   # public repo — never flip this on
           prompt: |
             /gem-inwestycyjny ${{ github.event.inputs.quality && format('--quality={0}', github.event.inputs.quality) || '' }}
 
@@ -79,17 +97,18 @@ jobs:
             --disallowedTools "ScheduleWakeup" "SendMessage" "TaskCreate" "TaskUpdate" "TaskGet" "TaskList" "TaskOutput" "TaskStop" "Monitor" "PushNotification"
 
       - name: annotate re-entry context
-        if: always()
+        if: always() && steps.data.outcome == 'success'
         run: |
           # pamiec miedzysystemowa: dopisz do swiezo zalogowanych rekomendacji
           # kontekst wyjscia, jesli ich ticker jest w closed_positions.csv.
           # Deterministyczny, idempotentny, tylko stdlib — bez pip.
-          python3 skills/gem-position-auditor/reentry_context.py \
+          .github/scripts/quiet-run.sh reentry-context - -- \
+            python3 skills/gem-position-auditor/reentry_context.py \
             .claude/skills/gem-inwestycyjny/history/recommendations.csv closed_positions.csv \
             || echo "reentry_context: non-fatal, pomijam"
 
       - name: capture run log
-        if: always()
+        if: always() && steps.data.outcome == 'success'
         run: |
           RUNBOOK_DIR=.claude/skills/gem-inwestycyjny/history/runbook
           FULL_DIR="$RUNBOOK_DIR/full"
@@ -110,68 +129,13 @@ jobs:
             echo '{"error":"execution log not found at expected path"}' > "$RUN_FILE"
           fi
 
-          python3 - "$RUN_FILE" "$DATE" "${{ github.run_id }}" >> "$SUMMARY_FILE" <<'PYEOF'
-          import json, sys
-          path, date, run_id = sys.argv[1], sys.argv[2], sys.argv[3]
-          try:
-              with open(path) as f:
-                  data = json.load(f)
-          except Exception as e:
-              print(json.dumps({"run_id": run_id, "date": date, "error": f"failed to parse log: {e}"}))
-              sys.exit(0)
-          events = data if isinstance(data, list) else [data]
-          result = next((e for e in reversed(events) if isinstance(e, dict) and e.get("type") == "result"), {})
-          denials = result.get("permission_denials") or []
-
-          # reconstruct per-stage timing from Task tool dispatch/completion events.
-          # each Scout/Quant/Alpha/Auditor/Director call (and Scout's own search-wave
-          # sub-tasks) shows up here as one entry, in chronological order.
-          descriptions = {}
-          completions = []
-          seen_task_ids = set()
-          for e in events:
-              if not isinstance(e, dict) or e.get("type") != "system":
-                  continue
-              if e.get("subtype") == "task_started" and e.get("task_id"):
-                  descriptions.setdefault(e["task_id"], e.get("description", e["task_id"]))
-              elif e.get("subtype") == "task_updated":
-                  patch = e.get("patch") or {}
-                  tid = e.get("task_id")
-                  if patch.get("status") == "completed" and patch.get("end_time") and tid not in seen_task_ids:
-                      seen_task_ids.add(tid)
-                      completions.append((tid, patch["end_time"]))
-          completions.sort(key=lambda x: x[1])
-
-          duration_ms = result.get("duration_ms")
-          approx_start_ms = (completions[-1][1] - duration_ms) if (completions and duration_ms) else None
-
-          timeline = []
-          prev_end = approx_start_ms
-          for tid, end_ms in completions:
-              desc = descriptions.get(tid, tid)[:80]
-              elapsed_sec = round((end_ms - prev_end) / 1000, 1) if prev_end is not None else None
-              timeline.append({"stage": desc, "elapsed_sec": elapsed_sec})
-              prev_end = end_ms
-
-          summary = {
-              "run_id": run_id,
-              "date": date,
-              "subtype": result.get("subtype"),
-              "is_error": result.get("is_error"),
-              "num_turns": result.get("num_turns"),
-              "total_cost_usd": result.get("total_cost_usd"),
-              "permission_denials_count": result.get("permission_denials_count", len(denials)),
-              "error": result.get("result") if result.get("is_error") else None,
-              "stage_timeline": timeline,
-          }
-          print(json.dumps(summary))
-
-          sys.stderr.write("\n--- stage timing (run %s) ---\n" % run_id)
-          for t in timeline:
-              secs = "%6.1fs" % t["elapsed_sec"] if t["elapsed_sec"] is not None else "    ?s"
-              sys.stderr.write("%s  %s\n" % (secs, t["stage"]))
-          sys.stderr.write("-----------------------------\n")
-          PYEOF
+          # full summary (incl. error text) -> private summary.jsonl;
+          # only turns/cost/stage timing -> public log + Job Summary
+          python3 .github/scripts/public_summary.py claude-run "$RUN_FILE" "$SUMMARY_FILE" \
+            --run-id "${{ github.run_id }}" --date "$DATE" --title "Gem pipeline (Scout → Director)"
+          python3 .github/scripts/public_summary.py funnel \
+            .claude/skills/gem-inwestycyjny/history/recommendations.csv \
+            .claude/skills/gem-inwestycyjny/history/scout_tickers.csv --date "$DATE"
 
           # keep only the newest 10 full logs; older runs survive only as a summary.jsonl line
           (cd "$FULL_DIR" && ls -1t run-*.json 2>/dev/null | tail -n +11 | xargs -r rm --)
@@ -182,7 +146,7 @@ jobs:
           fi
 
       - name: verify report produced
-        if: always()
+        if: always() && steps.data.outcome == 'success'
         run: |
           # Guard against the "green but empty" failure mode: the action can
           # self-report success while having stalled mid-pipeline (no report).
@@ -210,7 +174,7 @@ jobs:
           fi
 
       - name: commit report
-        if: always()
+        if: always() && steps.data.outcome == 'success'
         run: |
           cd data
           git config user.name "gem-bot"
@@ -219,8 +183,9 @@ jobs:
           [ -f "$REPORT_FILE" ] && git add "$REPORT_FILE"
           [ -f closed_positions.csv ] && git add closed_positions.csv
           [ -d .claude/skills/gem-inwestycyjny/history ] && git add .claude/skills/gem-inwestycyjny/history
-          git commit -m "gem pipeline: $(date +%F) (run ${{ github.run_id }})" || echo "no changes"
-          git push
+          [ -d ci-logs ] && git add ci-logs
+          git commit -q -m "gem pipeline: $(date +%F) (run ${{ github.run_id }})" || echo "no changes"
+          git push -q
 
       - name: set email subject date
         if: always()
@@ -241,7 +206,7 @@ jobs:
           convert_markdown: true
 
       - name: email failure notice
-        if: always() && env.REPORT_OK != 'true'
+        if: always() && steps.preflight.outcome == 'success' && env.REPORT_OK != 'true'
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
