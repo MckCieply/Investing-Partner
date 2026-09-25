@@ -11,6 +11,11 @@ on:
       quality:
         description: 'Preset jakosci: optimal | lean | max'
         default: 'optimal'
+      mode:
+        description: 'discover = nowi kandydaci | review = ponowna ocena posiadanych pozycji (tickery z review_tickers.txt w repo danych, brak = caly holdings.json)'
+        type: choice
+        options: [discover, review]
+        default: 'discover'
 permissions:
   contents: read
   id-token: write
@@ -38,7 +43,11 @@ jobs:
         run: .github/scripts/require-env.sh DATA_APP_CLIENT_ID DATA_APP_PRIVATE_KEY CLAUDE_CODE_OAUTH_TOKEN GMAIL_USERNAME GMAIL_APP_PASSWORD MAIL_TO
 
       - name: set report path
-        run: echo "REPORT_FILE=reports/gem-$(date +%F).md" >> "$GITHUB_ENV"
+        env:
+          MODE: ${{ github.event.inputs.mode || 'discover' }}
+        run: |
+          PREFIX=gem; [ "$MODE" = review ] && PREFIX=review
+          echo "REPORT_FILE=reports/$PREFIX-$(date +%F).md" >> "$GITHUB_ENV"
 
       - name: mint data-repo token
         id: app-token
@@ -70,6 +79,10 @@ jobs:
           ln -sfn "$(pwd)/data/reports" reports
           ln -sfn "$(pwd)/data/.claude/skills/gem-inwestycyjny/history" .claude/skills/gem-inwestycyjny/history
           ln -sf "$(pwd)/data/closed_positions.csv" closed_positions.csv
+          # tryb --review: pozycje + stopy + (opcjonalna) lista tickerow do oceny
+          for f in holdings.json stops_state.json review_tickers.txt; do
+            if [ -f "data/$f" ]; then ln -sf "$(pwd)/data/$f" "$f"; fi
+          done
 
       - name: run gem-inwestycyjny pipeline
         uses: anthropics/claude-code-action@v1
@@ -77,12 +90,14 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           show_full_output: false   # public repo — never flip this on
           prompt: |
-            /gem-inwestycyjny ${{ github.event.inputs.quality && format('--quality={0}', github.event.inputs.quality) || '' }}
+            /gem-inwestycyjny ${{ github.event.inputs.quality && format('--quality={0}', github.event.inputs.quality) || '' }} ${{ github.event.inputs.mode == 'review' && '--review' || '' }}
 
-            Wykonaj WSZYSTKIE kroki opisane w SKILL.md, łącznie z Krokiem 1 (zapis
-            historii Scouta do history/scout_<data>.md i history/scout_tickers.csv)
-            i Krokiem 6 (Recommendation Tracking Log — zapis do
-            history/recommendations.csv dla każdego tickera z ZIELONE_SWIATLO: TAK).
+            Wykonaj WSZYSTKIE kroki opisane w SKILL.md dla wybranego trybu.
+            Tryb Discover (bez --review): obowiązkowe są Krok 1 (zapis historii
+            Scouta do history/scout_<data>.md i history/scout_tickers.csv) i Krok 6
+            (Recommendation Tracking Log — zapis do history/recommendations.csv).
+            Tryb Review (--review): obowiązuje sekcja "Tryb Review" SKILL.md —
+            Krok 0 (kontekst pozycji), bez scout_tickers.csv i bez Kroku 6.
             To są wymagane efekty tego runu, nie pomiń ich.
 
             Na końcu zapisz finalną kompozycję widoku (DIRECTOR_FINAL + appendix
@@ -164,7 +179,7 @@ jobs:
           # by requiring the file to actually differ from the data repo's
           # committed HEAD state.
           REPORT_CHANGED=$(cd data && git status --porcelain -- "$REPORT_FILE")
-          if [ -s "$REPORT_FILE" ] && grep -qiE "Karta Zlece|DIRECTOR|Gem Inwestycyjny" "$REPORT_FILE" && [ -n "$REPORT_CHANGED" ]; then
+          if [ -s "$REPORT_FILE" ] && grep -qiE "Karta Zlece|Karta Decyzji|DIRECTOR|Gem Inwestycyjny" "$REPORT_FILE" && [ -n "$REPORT_CHANGED" ]; then
             echo "REPORT_OK=true" >> "$GITHUB_ENV"
             echo "Report present, non-trivial, and changed this run: $REPORT_FILE"
           elif [ -s "$REPORT_FILE" ] && [ -z "$REPORT_CHANGED" ]; then
@@ -203,7 +218,7 @@ jobs:
           password: ${{ secrets.GMAIL_APP_PASSWORD }}
           from: Gem Inwestycyjny
           to: ${{ secrets.MAIL_TO }}
-          subject: "Gem Inwestycyjny — kandydaci ${{ env.MAIL_DATE }}"
+          subject: "Gem Inwestycyjny — ${{ github.event.inputs.mode == 'review' && 'review pozycji' || 'kandydaci' }} ${{ env.MAIL_DATE }}"
           html_body: file://${{ env.REPORT_FILE }}
           convert_markdown: true
 

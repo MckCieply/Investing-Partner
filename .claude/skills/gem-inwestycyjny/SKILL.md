@@ -64,6 +64,72 @@ Sprawdź ARGUMENTS użytkownika. Domyślnie: konfiguracja Optymalna.
 
 Pełne tabele w `${BASE_DIR}/agents/_models.md`.
 
+| Argument | Tryb |
+|----------|------|
+| (brak) | **Discover** — Scout szuka nowych kandydatów (Kroki 1–6 poniżej) |
+| `--review` | **Review** — ponowna ocena tickerów, które już MAMY w portfelu (patrz sekcja „Tryb Review" niżej) |
+
+---
+
+## Tryb Review (`--review`) — re-walidacja posiadanych pozycji
+
+Ten sam łańcuch Scout → Quant → Alpha → Auditor → Director, ale zamiast szukać nowych okazji
+odpowiada na pytanie: **„czy teza, z którą weszliśmy, wciąż żyje — trzymać, dokładać, ciąć czy
+zamknąć i rotować?"**. Odpalany ręcznie, gdy użytkownik chce świeżej oceny konkretnych pozycji.
+
+### Krok 0 (tylko Review): zbierz kontekst pozycji — sam, bez dispatchu
+1. Lista tickerów: `review_tickers.txt` w katalogu roboczym (po jednym w linii: `TICKER.XTB TICKER.YAHOO`,
+   `#` = komentarz). Brak pliku lub pusty → wszystkie pozycje z `holdings.json`.
+   **Nigdy nie wypisuj tych tickerów w komendach `echo`/Bash** — w publicznym repo log jest jawny.
+2. Dla każdego tickera zbierz w jeden blok `POSITION_CONTEXT`:
+   - `avg_cost` z `holdings.json`, aktualny `stop` / `bucket` z `stops_state.json` (jeśli są),
+   - **pierwotną tezę**: najnowszy blok tego tickera w `reports/gem-*.md` (Grep po tickerze XTB) — TEZA,
+     KATALIZATOR (+data), ANTI_THESIS, RED_FLAG oraz warunki/transze od Auditora/Directora. Brak w
+     raportach → `TEZA_PIERWOTNA: BRAK (pozycja otwarta poza pipeline'em)` — to też informacja.
+   - wiersze z `recommendations.csv` dla tego tickera (outcome, np. czy Quant go wtedy odrzucił).
+3. Do promptu KAŻDEGO z 5 agentów doklej na końcu: `REVIEW_MODE_OVERRIDE` (poniżej, sekcja dla danego
+   agenta) + `POSITION_CONTEXT`. Pliki agentów się nie zmieniają — override ma pierwszeństwo tam, gdzie
+   się z nimi kłóci.
+
+### REVIEW_MODE_OVERRIDE — per agent
+- **Scout:** NIE rób Fal 0–3 i nie szukaj nowych tickerów. Dla KAŻDEGO tickera z `POSITION_CONTEXT`
+  (i tylko dla nich) zrób 3–5 zapytań WebSearch o wydarzenia od daty pierwotnej tezy. Filtry
+  Crowded/Novelty/korelacji NIE odrzucają tickera (to pozycja, nie kandydat) — możesz je tylko
+  odnotować. Format jak zwykle (`TICKER_n` z TEZA/KATALIZATOR/ANTI_THESIS/RED_FLAG = stan **na dziś**,
+  KATALIZATOR tylko przyszły), plus dodatkowe pola per ticker:
+  `TEZA_PIERWOTNA` (1 zdanie), `KATALIZATOR_PIERWOTNY_WYNIK` (co się stało, z datą i liczbami; lub
+  „jeszcze przed nami"), `RED_FLAG_PIERWOTNY: SPEŁNIONY/NIESPEŁNIONY/NIEROZSTRZYGNIĘTY`,
+  `NOWE_FAKTY` (istotne zdarzenia spoza pierwotnej tezy), `STATUS_TEZY: ŻYWA / ZMIENIONA / MARTWA`.
+  **ZMIENIONA** = pozycja broni się, ale innym argumentem niż ten, z którym weszliśmy — nazwij to
+  wprost; nie wolno cicho podmienić tezy na nową (sunk cost).
+- **Quant:** bez zmian (ten sam skrypt, te same bramki).
+- **Alpha:** bramka logiczna NIE jest absolutna — `QUANT: NIE` nie odrzuca pozycji, tylko oznacza
+  `TECHNIKA_PRZECIW` i blokuje `DOKŁADAJ`. R:R licz od dzisiejszej ceny (nie od `avg_cost` — koszt
+  wejścia jest utopiony; podaj go tylko informacyjnie jako P/L). Dodaj per ticker
+  `KOSZT_ALTERNATYWNY`: czy kapitał w tej pozycji ma przed sobą katalizator z datą, czy czeka „na coś".
+- **Auditor:** zamiast ZATWIERDZONO/WSTRZYMAJ/VETO wydaj per ticker `WERDYKT_POZYCJI`:
+  `TRZYMAJ` / `DOKŁADAJ` (tylko: teza ŻYWA lub ZMIENIONA-na-lepsze, Quant TAK, R:R ≥ 2:1) /
+  `REDUKUJ` / `ZAMKNIJ` (teza MARTWA, albo pierwotny katalizator minął bez efektu i brak nowego z
+  datą w ≤3 mies.). Do tego: `STOP_REKOMENDOWANY` (porównaj z obecnym stopem z `POSITION_CONTEXT`
+  i powiedz, czy ma sens — np. zdarzenie korporacyjne, które mechanicznie obniży kurs: dywidenda,
+  zwrot kapitału, spin-off), `PUNKT_KONTROLNY` (data/zdarzenie następnej weryfikacji).
+- **Director:** zamiast `## Karta Zleceń XTB` pisz `## Karta Decyzji Pozycji`:
+  ```
+  ✅ TRZYMAJ / ➕ DOKŁADAJ / ✂️ REDUKUJ / ❌ ZAMKNIJ: [TICKER.XTB] | SL: [stop] | Kontrola: [data/warunek]
+     Teza: [ŻYWA/ZMIENIONA/MARTWA] — [1 zdanie: co się stało z pierwotnym katalizatorem]
+     Dlaczego: [1 zdanie — decydujący argument Auditora]
+  ```
+  Pozostałe sekcje (Pipeline Story, Radar, Komentarz CIO) jak zwykle. Werdykt Auditora wiąże tak
+  samo jak VETO w trybie Discover.
+
+### Persystencja w trybie Review (różnice vs Discover)
+- Pełny `SCOUT_REPORT` → `${BASE_DIR}/history/scout_review_${TODAY}.md`. **NIE dopisuj** do
+  `scout_tickers.csv` (to anti-context i metryka nowości Scouta dla nowych pomysłów).
+- **Pomiń Krok 6** — nie dopisuj nic do `recommendations.csv`. Review nie jest nowym sygnałem
+  wejścia; wpisy zafałszowałyby lejek i porównanie „kupione vs odrzucone" w Performance Digest.
+- Raport końcowy → `reports/review-${TODAY}.md`, nagłówek `# Gem Inwestycyjny — Review pozycji — [DATA]`,
+  reszta kompozycji jak w sekcji „Finalna kompozycja widoku".
+
 ---
 
 ## Workflow — 5 kroków sekwencyjnie
