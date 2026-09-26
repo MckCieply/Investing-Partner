@@ -114,6 +114,7 @@ Ten plik (CLAUDE.md) jest zawsze ładowany do kontekstu — ma zostać krótki. 
 - [`skills/gem-position-auditor/SKILL.md`](skills/gem-position-auditor/SKILL.md) — pełna logika Agenta 6: dobór metody stopa per bucket (ATR% vs SMA/RSI), transze, histereza, format diffu tygodniowego.
 - [`.claude/skills/gem-inwestycyjny/SKILL.md`](.claude/skills/gem-inwestycyjny/SKILL.md) — orchestrator pipeline'u 5 subagentów (Scout→Director) + kontrakt synchroniczności dispatchu.
 - [`.claude/skills/gem-inwestycyjny/PLAN_recommendation_tracking.md`](.claude/skills/gem-inwestycyjny/PLAN_recommendation_tracking.md) — schemat CSV i zasady logowania rekomendacji BUY do `history/recommendations.csv` (krok 6, zaimplementowany — patrz sekcja 2 wyżej).
+- [`.claude/skills/gem-inwestycyjny/PLAN_scout_v2.md`](.claude/skills/gem-inwestycyjny/PLAN_scout_v2.md) — plan (niezaimplementowany) przebudowy Scouta: z WebSearch motywów na deterministyczne detektory zdarzeń (raporty, wolumen, insiderzy, newsy) + LLM jako analityk zdarzenia; kolejność wdrożenia i pomiar.
 - [`backtest/README.md`](backtest/README.md) — projekt badawczy "czy setup wejściowy daje edge nad SPY": metodologia, wynik (Grupy 1–3: FAIL), i stamtąd dalsze linki do `HANDOFF_pead_mwig40.md` (nowy, wciąż otwarty wątek PEAD/mWIG40) i notatek walidacyjnych grup 2–3.
 - [`skills/performance-digest/SKILL.md`](skills/performance-digest/SKILL.md) — co dokładnie liczy miesięczny audyt skuteczności (sekcja 4 wyżej), dlaczego miesięcznie nie tygodniowo, i czym różni się od `backtest/`.
 
